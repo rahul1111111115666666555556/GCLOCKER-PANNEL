@@ -7,34 +7,33 @@ const PORT = process.env.PORT || 3000;
 
 let botProcess = null;
 
-// ✅ Middleware for JSON body
+// Middleware
 app.use(express.json());
-// ✅ Serve frontend
 app.use(express.static("public"));
 
-// ✅ Home page
+// Serve frontend
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/public/index.html");
 });
 
-// ✅ Paste appstate + start bot
+// POST: Paste AppState & Start Bot
 app.post("/paste-start", (req, res) => {
   const { data } = req.body;
 
   try {
-    JSON.parse(data); // Validate
+    JSON.parse(data); // validate JSON
     fs.writeFileSync("appstate.json", data);
 
-    if (botProcess) return res.send("⚠️ Bot already running!");
+    if (botProcess) return res.send("⚠️ Bot already running.");
 
     botProcess = fork("bot.js");
     res.send("🟢 Bot started successfully!");
   } catch (err) {
-    res.send("❌ Invalid JSON format! Paste a correct appstate.");
+    res.send("❌ Invalid AppState JSON!");
   }
 });
 
-// ✅ Stop bot
+// GET: Stop Bot
 app.get("/stop-bot", (req, res) => {
   if (!botProcess) return res.send("⚠️ Bot is not running.");
   botProcess.kill();
@@ -42,7 +41,7 @@ app.get("/stop-bot", (req, res) => {
   res.send("🔴 Bot stopped successfully!");
 });
 
-// ✅ Bot status
+// GET: Status
 app.get("/status", (req, res) => {
   res.send(botProcess ? "🟢 Bot is running" : "🔴 Bot is stopped");
 });
