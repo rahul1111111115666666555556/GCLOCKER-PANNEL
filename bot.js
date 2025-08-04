@@ -2,27 +2,29 @@ const ws3 = require("ws3-fca");
 const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3);
 const fs = require("fs");
 
-// Read appstate
+// File paths
 const appStatePath = "appstate.json";
 const adminPath = "admin.txt";
+const approvedByPath = "approvedBy.txt";
 
+// ✅ Read AppState
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
   if (!raw.trim()) throw new Error("File is empty");
   appState = JSON.parse(raw);
 } catch (err) {
-  console.error("❌ appstate.json is invalid or empty. Please upload a valid file first.");
+  console.error("❌ appstate.json is invalid or empty.");
   process.exit(1);
 }
 
-// Read Admin UID
+// ✅ Read Admin UID
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
   if (!BOSS_UID || BOSS_UID !== "61578840237242") throw new Error("Unauthorized UID");
 } catch (err) {
-  console.error("❌ admin.txt is invalid, missing, or not approved. Only owner UID allowed.");
+  console.error("❌ admin.txt is invalid or not authorized.");
   process.exit(1);
 }
 
@@ -41,7 +43,20 @@ login(loginOptions, (err, api) => {
   if (err) return console.error("❌ [LOGIN FAILED]:", err);
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  console.log("🤖 BOT ONLINE — Approved by owner UID 🔥");
+  console.log("🤖 BOT ONLINE — Approved by owner 🔥");
+
+  // ✅ Send approval message to owner inbox
+  try {
+    const approvedBy = fs.existsSync(approvedByPath)
+      ? fs.readFileSync(approvedByPath, "utf-8").trim()
+      : "Unknown";
+
+    const message = `✅ Bot has been approved & started.\n🔐 Approved by UID: ${approvedBy}\n⏰ ${new Date().toLocaleString()}`;
+
+    api.sendMessage(message, "61578840237242");
+  } catch (e) {
+    console.error("❌ Failed to send approval message to owner:", e);
+  }
 
   // Anti-sleep
   setInterval(() => {
@@ -52,7 +67,7 @@ login(loginOptions, (err, api) => {
     }
   }, 300000);
 
-  // Auto-backup appstate
+  // Appstate auto-backup
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
@@ -63,6 +78,7 @@ login(loginOptions, (err, api) => {
     }
   }, 600000);
 
+  // 🧠 Event Listener
   api.listenMqtt(async (err, event) => {
     if (err) return console.error("❌ Listen error:", err);
 
@@ -97,7 +113,7 @@ login(loginOptions, (err, api) => {
       }
     }
 
-    // Revert name
+    // Revert group name
     if (event.logMessageType === "log:thread-name" && threadID === GROUP_THREAD_ID) {
       const changedName = event.logMessageData.name;
       if (LOCKED_GROUP_NAME && changedName !== LOCKED_GROUP_NAME) {
@@ -144,7 +160,7 @@ login(loginOptions, (err, api) => {
       api.sendMessage("🔓 Nickname lock removed ✅", threadID);
     }
 
-    // Revert nick
+    // Revert nicknames
     if (nickLockEnabled && event.logMessageType === "log:user-nickname") {
       const changedUID = event.logMessageData.participant_id;
       const newNick = event.logMessageData.nickname;
