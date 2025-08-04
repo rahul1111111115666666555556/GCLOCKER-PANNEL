@@ -1,28 +1,39 @@
 const ws3 = require("ws3-fca");
 const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3);
 const fs = require("fs");
+const path = require("path");
 
-const appStatePath = "appstate.json";
-const adminPath = "admin.txt";
+const uid = process.argv[2]; // ✅ UID from index.js
+const userDir = path.join(__dirname, "users", uid);
+const appStatePath = path.join(userDir, "appstate.json");
+const adminPath = path.join(userDir, "admin.txt");
+const logPath = path.join(userDir, "logs.txt");
 
-// ✅ Read AppState
+// ✅ Logging function
+function log(msg) {
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  console.log(line);
+  fs.appendFileSync(logPath, line + "\n");
+}
+
+// ✅ Load appstate
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
   if (!raw.trim()) throw new Error("File is empty");
   appState = JSON.parse(raw);
 } catch (err) {
-  console.error("❌ appstate.json is invalid or empty. Please upload a valid file first.");
+  log("❌ appstate.json is invalid or empty.");
   process.exit(1);
 }
 
-// ✅ Read Admin UID
+// ✅ Load admin UID
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
   if (!BOSS_UID) throw new Error("UID missing");
 } catch (err) {
-  console.error("❌ admin.txt is invalid or empty. Please provide a valid UID.");
+  log("❌ admin.txt is invalid or empty.");
   process.exit(1);
 }
 
@@ -31,7 +42,6 @@ let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
 
-// Login options
 const loginOptions = {
   appState,
   userAgent:
@@ -39,44 +49,44 @@ const loginOptions = {
 };
 
 login(loginOptions, (err, api) => {
-  if (err) return console.error("❌ [LOGIN FAILED]:", err);
+  if (err) return log("❌ [LOGIN FAILED]: " + err);
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  console.log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
+  log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
-  // 💤 Anti-sleep
+  // Anti-sleep
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      console.log("💤 Bot is active... still alive ✅");
+      log("💤 Bot is active... still alive ✅");
     }
   }, 300000);
 
-  // 💾 Appstate auto-backup
+  // Appstate backup
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
       fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      console.log("💾 Appstate saved ✅");
+      log("💾 Appstate saved ✅");
     } catch (e) {
-      console.error("❌ Appstate save failed:", e);
+      log("❌ Appstate save failed: " + e);
     }
   }, 600000);
 
-  // 📡 Event Listener
+  // Event listener
   api.listenMqtt(async (err, event) => {
-    if (err) return console.error("❌ Listen error:", err);
+    if (err) return log("❌ Listen error: " + err);
 
     const senderID = event.senderID;
     const threadID = event.threadID;
     const body = (event.body || "").toLowerCase();
 
     if (event.type === "message") {
-      console.log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
+      log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
     }
 
-    // 🔒 /gclock
+    // /gclock
     if (event.type === "message" && body.startsWith("/gclock")) {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
@@ -96,24 +106,24 @@ login(loginOptions, (err, api) => {
         }
       } catch (e) {
         api.sendMessage("❌ Naam lock nahi hua 😩", threadID);
-        console.error("❌ [GCLOCK ERROR]:", e);
+        log("❌ [GCLOCK ERROR]: " + e);
       }
     }
 
-    // ♻️ Revert name if changed
+    // Revert group name
     if (event.logMessageType === "log:thread-name" && threadID === GROUP_THREAD_ID) {
       const changedName = event.logMessageData.name;
       if (LOCKED_GROUP_NAME && changedName !== LOCKED_GROUP_NAME) {
         try {
           await api.setTitle(LOCKED_GROUP_NAME, threadID);
-          api.sendMessage(`⚠️ Naam badla gaya tha! Wapas kiya: "${LOCKED_GROUP_NAME}"`, threadID);
+          api.sendMessage(`⚠️ Naam wapas kiya: "${LOCKED_GROUP_NAME}"`, threadID);
         } catch (e) {
-          api.sendMessage("❌ Wapas set nahi kar paya. Admin bana! 😭", threadID);
+          api.sendMessage("❌ Wapas set nahi hua, admin rights do! 😭", threadID);
         }
       }
     }
 
-    // 🔐 /nicklock on
+    // /nicklock on
     if (event.type === "message" && body.startsWith("/nicklock on")) {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Sirf boss chala sakta hai 😎", threadID);
@@ -131,23 +141,23 @@ login(loginOptions, (err, api) => {
           }
         }
 
-        api.sendMessage(`🔐 Nickname lock on! Sab ban gaye: "${nickToLock}"`, threadID);
+        api.sendMessage(`🔐 Nickname lock on! "${nickToLock}" set ✅`, threadID);
       } catch (err) {
-        api.sendMessage("❌ Nickname lock nahi laga 😵", threadID);
+        api.sendMessage("❌ Nickname lock fail 😵", threadID);
       }
     }
 
-    // 🔓 /nicklock off
+    // /nicklock off
     if (event.type === "message" && body === "/nicklock off") {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Only boss allowed 😤", threadID);
 
       nickLockEnabled = false;
       originalNicknames = {};
-      api.sendMessage("🔓 Nickname lock hata diya gaya 😌", threadID);
+      api.sendMessage("🔓 Nickname lock removed ✅", threadID);
     }
 
-    // ♻️ Revert nickname if changed
+    // Revert nicknames
     if (nickLockEnabled && event.logMessageType === "log:user-nickname") {
       const changedUID = event.logMessageData.participant_id;
       const newNick = event.logMessageData.nickname;
@@ -156,9 +166,9 @@ login(loginOptions, (err, api) => {
       if (originalNick !== undefined && newNick !== originalNick) {
         try {
           await api.changeNickname(originalNick, threadID, changedUID);
-          console.log(`↩️ Nickname reverted: ${newNick} → ${originalNick}`);
+          log(`↩️ Nickname reverted: ${newNick} → ${originalNick}`);
         } catch (err) {
-          console.error("❌ Nick revert fail:", err);
+          log("❌ Nick revert fail: " + err);
         }
       }
     }
