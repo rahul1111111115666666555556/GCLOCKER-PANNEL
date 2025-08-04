@@ -1,48 +1,72 @@
 const express = require("express");
-const fs = require("fs");
 const { fork } = require("child_process");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 let botProcess = null;
+let logs = "";
 
-app.use(express.static("public"));
 app.use(express.json());
+app.use(express.static("public"));
 
-function log(msg) {
-  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  fs.appendFileSync("logs.txt", line + "\n");
-  console.log(line);
-}
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/index.html");
+});
 
-// Start bot
-app.post("/start-bot", (req, res) => {
-  const { appstate, admin } = req.body;
-  if (!appstate || !admin) return res.send("❌ AppState or UID missing!");
+// Paste AppState + Admin UID + Start Bot
+app.post("/paste-start", (req, res) => {
+  const { data, uid } = req.body;
 
   try {
-    fs.writeFileSync("appstate.json", JSON.stringify(JSON.parse(appstate), null, 2));
-    fs.writeFileSync("admin.txt", admin.trim());
+    JSON.parse(data);
+    fs.writeFileSync("appstate.json", data);
+    fs.writeFileSync("admin.txt", uid || "");
 
-    if (botProcess) {
-      botProcess.kill();
-      botProcess = null;
-    }
+    if (botProcess) return res.send("⚠️ Bot already running.");
 
     botProcess = fork("bot.js");
-    log("✅ Bot started successfully!");
-    res.send("✅ Bot started!");
-  } catch (e) {
+
+    botProcess.stdout.on("data", (d) => {
+      logs += d.toString();
+      if (logs.length > 5000) logs = logs.slice(-5000); // trim
+    });
+
+    botProcess.stderr.on("data", (d) => {
+      logs += "[ERR] " + d.toString();
+      if (logs.length > 5000) logs = logs.slice(-5000);
+    });
+
+    botProcess.on("exit", () => {
+      logs += "\n[Bot exited]";
+      botProcess = null;
+    });
+
+    res.send("🟢 Bot started successfully!");
+  } catch (err) {
     res.send("❌ Invalid AppState JSON!");
   }
 });
 
-// Live logs
+// Stop Bot
+app.get("/stop-bot", (req, res) => {
+  if (!botProcess) return res.send("⚠️ Bot is not running.");
+  botProcess.kill();
+  botProcess = null;
+  res.send("🔴 Bot stopped successfully!");
+});
+
+// Show Status
+app.get("/status", (req, res) => {
+  res.send(botProcess ? "🟢 Bot is running" : "🔴 Bot is stopped");
+});
+
+// Show Logs
 app.get("/logs", (req, res) => {
-  if (!fs.existsSync("logs.txt")) return res.send("📭 No logs yet.");
-  res.send(fs.readFileSync("logs.txt", "utf-8"));
+  res.send(logs || "📭 No logs yet...");
 });
 
 app.listen(PORT, () => {
-  log(`🌐 Panel running at port ${PORT}`);
+  console.log(`🌐 Panel running at http://localhost:${PORT}`);
 });
