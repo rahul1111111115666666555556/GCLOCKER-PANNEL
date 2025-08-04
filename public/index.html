@@ -1,80 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ANU X BOT PANEL</title>
+  <title>AROHI X ANURAG - Bot Panel</title>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #111;
+      background: #000;
       color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      padding: 30px;
       text-align: center;
-      padding: 20px;
     }
+
+    h1 {
+      font-size: 28px;
+      color: #0ff;
+      text-shadow: 0 0 5px #0ff;
+    }
+
     .panel {
-      background: #222;
-      border-radius: 12px;
+      background: #111;
       padding: 25px;
+      border-radius: 12px;
       max-width: 600px;
       margin: auto;
-      box-shadow: 0 0 10px #f04;
+      box-shadow: 0 0 20px #0ff;
     }
+
     textarea, input {
       width: 100%;
-      margin-top: 10px;
-      padding: 10px;
-      font-family: monospace;
+      padding: 12px;
+      margin-top: 12px;
       border-radius: 8px;
       border: none;
-      background: #333;
+      background: #222;
       color: #0f0;
+      font-family: monospace;
       font-size: 14px;
     }
+
     button {
-      margin: 10px 5px;
+      margin-top: 15px;
       padding: 12px 20px;
-      border: none;
-      border-radius: 8px;
       font-weight: bold;
+      border-radius: 8px;
+      border: none;
+      background: #0f0;
+      color: #000;
       cursor: pointer;
     }
-    .approve-btn { background: #ff0; color: #000; }
-    .start-btn { background: #0f0; color: #000; }
-    .stop-btn { background: #f00; color: #fff; }
+
     #logs {
-      margin-top: 15px;
-      background: #000;
-      padding: 10px;
-      border-radius: 10px;
+      margin-top: 20px;
       text-align: left;
+      background: #000;
+      color: #0ff;
+      padding: 12px;
+      border-radius: 10px;
       max-height: 300px;
       overflow-y: auto;
       font-size: 13px;
-      color: #0af;
     }
   </style>
 </head>
 <body>
-  <h1>🚀 ANU X BOT PANEL</h1>
+  <h1>🚀 AROHI X ANURAG - Bot Panel</h1>
+
   <div class="panel">
-    <textarea id="appstate" placeholder="📋 Paste AppState JSON"></textarea>
-    <input id="admin" placeholder="👤 Paste Admin UID"><br>
-    <button class="approve-btn" onclick="sendApproval()">📨 Send for Approval</button>
-    <button class="start-btn" onclick="fetch('/start-bot')">🟢 Start Bot</button>
-    <button class="stop-btn" onclick="fetch('/stop-bot')">🔴 Stop Bot</button>
-    <div id="logs">📜 Logs will appear here...</div>
+    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..."></textarea>
+    <input id="admin" placeholder="👤 Enter Admin UID">
+    <button onclick="startBot()">🟢 Start Bot</button>
+    <div id="logs">📜 Live logs will appear here...</div>
   </div>
 
   <script>
-    async function sendApproval() {
+    async function startBot() {
       const data = {
         appstate: document.getElementById("appstate").value,
         admin: document.getElementById("admin").value
       };
-      const res = await fetch("/submit", {
+
+      const res = await fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data)
       });
+
       const text = await res.text();
       document.getElementById("logs").innerText += "\n" + text;
     }
@@ -82,9 +92,7 @@
     setInterval(() => {
       fetch("/logs")
         .then(res => res.text())
-        .then(log => {
-          document.getElementById("logs").innerText = log;
-        });
+        .then(log => document.getElementById("logs").innerText = log);
     }, 3000);
   </script>
 </body>
