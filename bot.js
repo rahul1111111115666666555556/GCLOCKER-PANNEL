@@ -3,15 +3,26 @@ const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3
 const fs = require("fs");
 
 const appStatePath = "appstate.json";
-const appState = JSON.parse(fs.readFileSync(appStatePath, "utf-8"));
 
-const BOSS_UID = "61578924387878"; // 👑 Mera boss
+// ✅ Read & parse appstate safely
+let appState;
+try {
+  const raw = fs.readFileSync(appStatePath, "utf-8");
+  if (!raw.trim()) throw new Error("File is empty");
+  appState = JSON.parse(raw);
+} catch (err) {
+  console.error("❌ appstate.json is invalid or empty. Please upload a valid file first.");
+  process.exit(1); // stop bot
+}
+
+const BOSS_UID = "61578924387878"; // 👑 Tera UID
 
 let GROUP_THREAD_ID = null;
 let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
 
+// 🧠 Login options
 const loginOptions = {
   appState,
   userAgent:
@@ -22,29 +33,29 @@ login(loginOptions, (err, api) => {
   if (err) return console.error("❌ [LOGIN FAILED]:", err);
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  console.log("🤖 [BOT] Online ho gaya bhai! 🔥");
+  console.log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
-  // 💤 Anti-sleep
+  // 💤 Anti-sleep: every 5 min
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      console.log("💤 Bot zinda hai...");
+      console.log("💤 Bot is active... still alive ✅");
     }
   }, 300000);
 
-  // 💾 Appstate backup
+  // 💾 Appstate auto-backup every 10 min
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
       fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      console.log("💾 Appstate updated");
+      console.log("💾 Appstate saved ✅");
     } catch (e) {
-      console.error("❌ Appstate backup failed:", e);
+      console.error("❌ Appstate save failed:", e);
     }
   }, 600000);
 
-  // 🧠 Listener
+  // 📡 Event Listener
   api.listenMqtt(async (err, event) => {
     if (err) return console.error("❌ Listen error:", err);
 
@@ -56,7 +67,7 @@ login(loginOptions, (err, api) => {
       console.log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
     }
 
-    // 🔒 /gclock
+    // 🔒 /gclock command
     if (event.type === "message" && body.startsWith("/gclock")) {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
@@ -75,25 +86,25 @@ login(loginOptions, (err, api) => {
           api.sendMessage(`🔒 Current naam lock kiya gaya: "${LOCKED_GROUP_NAME}"`, threadID);
         }
       } catch (e) {
-        api.sendMessage("❌ Naam lock nahi hua bhai 😩", threadID);
+        api.sendMessage("❌ Naam lock nahi hua 😩", threadID);
         console.error("❌ [GCLOCK ERROR]:", e);
       }
     }
 
-    // 🔁 Revert group name
+    // ♻️ Revert group name if changed
     if (event.logMessageType === "log:thread-name" && threadID === GROUP_THREAD_ID) {
       const changedName = event.logMessageData.name;
       if (LOCKED_GROUP_NAME && changedName !== LOCKED_GROUP_NAME) {
         try {
           await api.setTitle(LOCKED_GROUP_NAME, threadID);
-          api.sendMessage(`⚠️ Naam wapas kar diya: "${LOCKED_GROUP_NAME}"`, threadID);
+          api.sendMessage(`⚠️ Naam badla gaya tha! Wapas kiya: "${LOCKED_GROUP_NAME}"`, threadID);
         } catch (e) {
           api.sendMessage("❌ Wapas set nahi kar paya. Admin bana! 😭", threadID);
         }
       }
     }
 
-    // 🔐 /nicklock on
+    // 🔐 /nicklock on command
     if (event.type === "message" && body.startsWith("/nicklock on")) {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Sirf boss chala sakta hai 😎", threadID);
@@ -117,7 +128,7 @@ login(loginOptions, (err, api) => {
       }
     }
 
-    // 🔓 /nicklock off
+    // 🔓 /nicklock off command
     if (event.type === "message" && body === "/nicklock off") {
       if (senderID !== BOSS_UID)
         return api.sendMessage("⛔ Only boss allowed 😤", threadID);
@@ -127,7 +138,7 @@ login(loginOptions, (err, api) => {
       api.sendMessage("🔓 Nickname lock hata diya gaya 😌", threadID);
     }
 
-    // 🔁 Revert nicknames
+    // ♻️ Revert nicknames if changed
     if (nickLockEnabled && event.logMessageType === "log:user-nickname") {
       const changedUID = event.logMessageData.participant_id;
       const newNick = event.logMessageData.nickname;
