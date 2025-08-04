@@ -64,7 +64,7 @@
 
   <script>
     document.getElementById("pasteForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
+      e.preventDefault(); // ✅ prevent page reload
       const data = document.getElementById("appstateBox").value;
 
       const res = await fetch("/paste-start", {
@@ -87,4 +87,7 @@
       fetch("/status")
         .then(res => res.text())
         .then(t => document.getElementById("status").innerText = t);
-    },
+    }, 3000);
+  </script>
+</body>
+</html>
