@@ -31,6 +31,7 @@
     }
     button {
       margin-top: 15px;
+      margin-right: 10px;
       padding: 12px 20px;
       font-weight: bold;
       border-radius: 8px;
@@ -38,6 +39,10 @@
       background: #0f0;
       color: #000;
       cursor: pointer;
+    }
+    .stop-btn {
+      background: #f00;
+      color: #fff;
     }
     #status {
       margin-top: 15px;
@@ -52,6 +57,7 @@
     <form id="pasteForm">
       <textarea id="appstateBox" placeholder="📋 Paste your appstate JSON here..."></textarea><br>
       <button type="submit">🟢 Start Bot</button>
+      <button type="button" class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
     </form>
     <div id="status">Bot status will appear here...</div>
   </div>
@@ -71,11 +77,14 @@
       document.getElementById("status").innerText = txt;
     });
 
+    async function stopBot() {
+      const res = await fetch("/stop-bot");
+      const txt = await res.text();
+      document.getElementById("status").innerText = txt;
+    }
+
     setInterval(() => {
       fetch("/status")
         .then(res => res.text())
         .then(t => document.getElementById("status").innerText = t);
-    }, 3000);
-  </script>
-</body>
-</html>
+    },
