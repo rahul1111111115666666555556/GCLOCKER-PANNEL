@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ANU X BOT PANEL (Approval Mode)</title>
+  <title>ANU X BOT PANEL</title>
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -20,6 +20,7 @@
     }
     textarea, input {
       width: 100%;
+      margin-top: 10px;
       padding: 10px;
       font-family: monospace;
       border-radius: 8px;
@@ -27,87 +28,63 @@
       background: #333;
       color: #0f0;
       font-size: 14px;
-      margin-top: 10px;
     }
     button {
-      margin-top: 15px;
-      margin-right: 10px;
+      margin: 10px 5px;
       padding: 12px 20px;
-      font-weight: bold;
-      border-radius: 8px;
       border: none;
+      border-radius: 8px;
+      font-weight: bold;
       cursor: pointer;
     }
+    .approve-btn { background: #ff0; color: #000; }
     .start-btn { background: #0f0; color: #000; }
     .stop-btn { background: #f00; color: #fff; }
-    .approve-btn { background: #0af; color: #000; }
-    #status, #logs {
+    #logs {
       margin-top: 15px;
-      font-size: 15px;
-      white-space: pre-wrap;
       background: #000;
       padding: 10px;
-      border-radius: 8px;
-      max-width: 600px;
-      margin-inline: auto;
-      color: #0f0;
+      border-radius: 10px;
+      text-align: left;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 13px;
+      color: #0af;
     }
   </style>
 </head>
 <body>
   <h1>🚀 ANU X BOT PANEL</h1>
-
   <div class="panel">
-    <form id="pasteForm">
-      <textarea id="appstateBox" placeholder="📋 Paste AppState JSON here..."></textarea>
-      <input type="text" id="adminUID" placeholder="👑 Enter Admin UID">
-      <button type="submit" class="start-btn">💾 Send for Approval</button>
-      <button type="button" class="approve-btn" onclick="approveBot()">✅ Approve & Start</button>
-      <button type="button" class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
-    </form>
-
-    <div id="status">Waiting...</div>
+    <textarea id="appstate" placeholder="📋 Paste AppState JSON"></textarea>
+    <input id="admin" placeholder="👤 Paste Admin UID"><br>
+    <button class="approve-btn" onclick="sendApproval()">📨 Send for Approval</button>
+    <button class="start-btn" onclick="fetch('/start-bot')">🟢 Start Bot</button>
+    <button class="stop-btn" onclick="fetch('/stop-bot')">🔴 Stop Bot</button>
+    <div id="logs">📜 Logs will appear here...</div>
   </div>
 
-  <div id="logs">📜 Logs will appear here...</div>
-
   <script>
-    document.getElementById("pasteForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const data = document.getElementById("appstateBox").value;
-      const uid = document.getElementById("adminUID").value;
-
+    async function sendApproval() {
+      const data = {
+        appstate: document.getElementById("appstate").value,
+        admin: document.getElementById("admin").value
+      };
       const res = await fetch("/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data, uid })
+        body: JSON.stringify(data)
       });
-
-      const txt = await res.text();
-      document.getElementById("status").innerText = txt;
-    });
-
-    async function approveBot() {
-      const res = await fetch("/approve-bot");
-      const txt = await res.text();
-      document.getElementById("status").innerText = txt;
-    }
-
-    async function stopBot() {
-      const res = await fetch("/stop-bot");
-      const txt = await res.text();
-      document.getElementById("status").innerText = txt;
+      const text = await res.text();
+      document.getElementById("logs").innerText += "\n" + text;
     }
 
     setInterval(() => {
-      fetch("/status").then(res => res.text()).then(t => {
-        document.getElementById("status").innerText = t;
-      });
-      fetch("/logs").then(res => res.text()).then(t => {
-        const box = document.getElementById("logs");
-        box.innerText = t;
-        box.scrollTop = box.scrollHeight;
-      });
+      fetch("/logs")
+        .then(res => res.text())
+        .then(log => {
+          document.getElementById("logs").innerText = log;
+        });
     }, 3000);
   </script>
 </body>
