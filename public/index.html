@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ANU X BOT PANEL</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANU X BOT PANEL (Paste Mode)</title>
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -11,60 +10,41 @@
       text-align: center;
       padding: 20px;
     }
-    h1 {
-      color: #f04;
-      font-size: 28px;
-    }
     .panel {
       background: #222;
       border-radius: 12px;
       padding: 25px;
-      max-width: 400px;
-      margin: 20px auto;
+      max-width: 600px;
+      margin: auto;
       box-shadow: 0 0 10px #f04;
     }
-    input[type="file"] {
-      background: #333;
-      color: white;
-      border: none;
-      padding: 12px;
+    textarea {
       width: 100%;
+      height: 200px;
+      padding: 10px;
+      font-family: monospace;
       border-radius: 8px;
+      border: none;
+      background: #333;
+      color: #0f0;
+      font-size: 14px;
     }
     button {
-      margin: 10px 5px;
-      padding: 12px 18px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
+      margin-top: 15px;
+      padding: 12px 20px;
       font-weight: bold;
+      border-radius: 8px;
+      border: none;
+      background: #0f0;
+      color: #000;
       cursor: pointer;
     }
-    .upload-btn { background-color: #0af; color: black; }
-    .start-btn  { background-color: #0f0; color: black; }
-    .stop-btn   { background-color: #f00; color: white; }
-    #status     { font-size: 18px; margin-top: 15px; color: #0af; }
+    #status {
+      margin-top: 15px;
+      color: #0af;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
-  <h1>🚀 ANU X BOT PANEL</h1>
-  <div class="panel">
-    <form action="/upload" method="POST" enctype="multipart/form-data">
-      <input type="file" name="appstate" required><br><br>
-      <button class="upload-btn" type="submit">📤 Upload AppState</button>
-    </form>
-    <div>
-      <button class="start-btn" onclick="fetch('/start-bot')">🟢 Start Bot</button>
-      <button class="stop-btn" onclick="fetch('/stop-bot')">🔴 Stop Bot</button>
-    </div>
-    <div id="status">Checking status...</div>
-  </div>
-  <script>
-    setInterval(() => {
-      fetch('/status')
-        .then(res => res.text())
-        .then(text => document.getElementById("status").innerText = text);
-    }, 2000);
-  </script>
-</body>
-</html>
+  <h1
