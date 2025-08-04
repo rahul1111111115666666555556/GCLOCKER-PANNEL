@@ -47,4 +47,35 @@
   </style>
 </head>
 <body>
-  <h1
+  <h1>🚀 ANU X BOT PANEL</h1>
+  <div class="panel">
+    <form id="pasteForm">
+      <textarea id="appstateBox" placeholder="📋 Paste your appstate JSON here..."></textarea><br>
+      <button type="submit">🟢 Start Bot</button>
+    </form>
+    <div id="status">Bot status will appear here...</div>
+  </div>
+
+  <script>
+    document.getElementById("pasteForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = document.getElementById("appstateBox").value;
+
+      const res = await fetch("/paste-start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data })
+      });
+
+      const txt = await res.text();
+      document.getElementById("status").innerText = txt;
+    });
+
+    setInterval(() => {
+      fetch("/status")
+        .then(res => res.text())
+        .then(t => document.getElementById("status").innerText = t);
+    }, 3000);
+  </script>
+</body>
+</html>
