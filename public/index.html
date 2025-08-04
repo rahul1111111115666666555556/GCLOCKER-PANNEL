@@ -15,8 +15,6 @@
 
     h1 {
       color: #f0f;
-      font-size: 28px;
-      margin-bottom: 20px;
       text-shadow: 0 0 10px #f0f;
     }
 
@@ -94,33 +92,28 @@
       const appstate = document.getElementById("appstate").value.trim();
       const admin = document.getElementById("uid").value.trim();
 
-      if (!appstate || !admin) return alert("❌ Please enter AppState and UID!");
+      if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appstate, admin })
-      })
-      .then(res => res.text())
-      .then(msg => alert(msg));
+      }).then(res => res.text()).then(alert);
     }
 
     function stopBot() {
       const uid = document.getElementById("uid").value.trim();
-      if (!uid) return alert("❌ Enter UID to stop bot");
+      if (!uid) return alert("❌ Enter UID to stop bot.");
 
-      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(msg => alert(msg));
+      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(alert);
     }
 
     setInterval(() => {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return;
-
-      fetch(`/logs?uid=${uid}`)
-        .then(res => res.text())
-        .then(text => {
-          document.getElementById("logs").innerText = text || "📭 No logs yet...";
-        });
+      fetch(`/logs?uid=${uid}`).then(res => res.text()).then(log => {
+        document.getElementById("logs").innerText = log;
+      });
     }, 3000);
   </script>
 </body>
