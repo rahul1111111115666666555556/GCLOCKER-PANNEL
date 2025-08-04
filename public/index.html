@@ -39,7 +39,7 @@
       cursor: pointer;
     }
     .start-btn { background: #0f0; color: #000; }
-    .stop-btn  { background: #f00; color: #fff; }
+    .stop-btn { background: #f00; color: #fff; }
     .approve-btn { background: #0af; color: #000; }
     #status, #logs {
       margin-top: 15px;
@@ -61,10 +61,11 @@
     <form id="pasteForm">
       <textarea id="appstateBox" placeholder="📋 Paste AppState JSON here..."></textarea>
       <input type="text" id="adminUID" placeholder="👑 Enter Admin UID">
-      <button type="submit" class="start-btn">💾 Submit for Approval</button>
-      <button type="button" class="approve-btn" onclick="approveBot()">✅ Approve & Start (Owner)</button>
+      <button type="submit" class="start-btn">💾 Send for Approval</button>
+      <button type="button" class="approve-btn" onclick="approveBot()">✅ Approve & Start</button>
       <button type="button" class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
     </form>
+
     <div id="status">Waiting...</div>
   </div>
 
@@ -99,7 +100,9 @@
     }
 
     setInterval(() => {
-      fetch("/status").then(res => res.text()).then(t => document.getElementById("status").innerText = t);
+      fetch("/status").then(res => res.text()).then(t => {
+        document.getElementById("status").innerText = t;
+      });
       fetch("/logs").then(res => res.text()).then(t => {
         const box = document.getElementById("logs");
         box.innerText = t;
