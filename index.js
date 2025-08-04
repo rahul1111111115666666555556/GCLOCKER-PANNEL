@@ -13,19 +13,19 @@ if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR);
 app.use(express.static("public"));
 app.use(express.json());
 
-let processes = {}; // UID => child process
+let processes = {}; // UID → bot process
 
+// ✅ Start Bot
 app.post("/start-bot", (req, res) => {
   const { appstate, admin } = req.body;
-  if (!appstate || !admin) return res.send("❌ AppState or Admin UID missing!");
+  if (!appstate || !admin) return res.send("❌ AppState or UID missing!");
 
   const userDir = path.join(USERS_DIR, admin);
-  const existingUsers = fs.readdirSync(USERS_DIR).filter(uid =>
+  const currentUsers = fs.readdirSync(USERS_DIR).filter(uid =>
     fs.existsSync(path.join(USERS_DIR, uid, "appstate.json"))
   );
 
-  // ✅ 20 user limit logic
-  if (!existingUsers.includes(admin) && existingUsers.length >= MAX_USERS) {
+  if (!currentUsers.includes(admin) && currentUsers.length >= MAX_USERS) {
     return res.send("❌ Limit reached: Only 20 users allowed.");
   }
 
@@ -36,24 +36,33 @@ app.post("/start-bot", (req, res) => {
     fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
 
     if (processes[admin]) processes[admin].kill();
+
     processes[admin] = fork("bot.js", [admin]);
 
     res.send(`✅ Bot started for UID: ${admin}`);
-  } catch (e) {
-    res.send("❌ Invalid AppState JSON!");
+  } catch (err) {
+    res.send("❌ Invalid AppState JSON.");
   }
 });
 
+// ✅ Stop Bot
+app.get("/stop-bot", (req, res) => {
+  const { uid } = req.query;
+  if (!uid || !processes[uid]) return res.send("⚠️ Bot not running.");
+  processes[uid].kill();
+  delete processes[uid];
+  res.send(`🔴 Bot stopped for UID: ${uid}`);
+});
+
+// ✅ Fetch Logs
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
-  if (!uid) return res.send("❌ UID missing in query.");
-
+  if (!uid) return res.send("❌ UID missing.");
   const logPath = path.join(USERS_DIR, uid, "logs.txt");
   if (!fs.existsSync(logPath)) return res.send("📭 No logs yet.");
-
-  res.send(fs.readFileSync(logPath, "utf-8"));
+  res.send(fs.readFileSync(logPath, "utf8"));
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 AROHI X ANURAG multi-user panel running on port ${PORT}`);
+  console.log(`🌐 AROHI X ANURAG panel running on port ${PORT}`);
 });
