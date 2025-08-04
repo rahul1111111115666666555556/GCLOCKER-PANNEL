@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ANU X BOT PANEL (with UID + Logs)</title>
+  <title>ANU X BOT PANEL (Approval Mode)</title>
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -36,45 +36,36 @@
       font-weight: bold;
       border-radius: 8px;
       border: none;
-      background: #0f0;
-      color: #000;
       cursor: pointer;
     }
-    .stop-btn {
-      background: #f00;
-      color: #fff;
-    }
-    #status {
+    .start-btn { background: #0f0; color: #000; }
+    .stop-btn  { background: #f00; color: #fff; }
+    .approve-btn { background: #0af; color: #000; }
+    #status, #logs {
       margin-top: 15px;
-      color: #0af;
-      font-size: 16px;
-    }
-    #logs {
-      margin-top: 20px;
-      text-align: left;
+      font-size: 15px;
+      white-space: pre-wrap;
+      background: #000;
+      padding: 10px;
+      border-radius: 8px;
       max-width: 600px;
       margin-inline: auto;
-      padding: 10px;
-      background: #000;
-      border-radius: 8px;
-      font-size: 13px;
       color: #0f0;
-      white-space: pre-wrap;
-      height: 200px;
-      overflow-y: auto;
     }
   </style>
 </head>
 <body>
   <h1>🚀 ANU X BOT PANEL</h1>
+
   <div class="panel">
     <form id="pasteForm">
-      <textarea id="appstateBox" placeholder="📋 Paste your AppState JSON here..."></textarea><br>
-      <input type="text" id="adminUID" placeholder="👑 Enter Admin UID here"><br>
-      <button type="submit">🟢 Start Bot</button>
+      <textarea id="appstateBox" placeholder="📋 Paste AppState JSON here..."></textarea>
+      <input type="text" id="adminUID" placeholder="👑 Enter Admin UID">
+      <button type="submit" class="start-btn">💾 Submit for Approval</button>
+      <button type="button" class="approve-btn" onclick="approveBot()">✅ Approve & Start (Owner)</button>
       <button type="button" class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
     </form>
-    <div id="status">Bot status will appear here...</div>
+    <div id="status">Waiting...</div>
   </div>
 
   <div id="logs">📜 Logs will appear here...</div>
@@ -85,7 +76,7 @@
       const data = document.getElementById("appstateBox").value;
       const uid = document.getElementById("adminUID").value;
 
-      const res = await fetch("/paste-start", {
+      const res = await fetch("/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data, uid })
@@ -95,26 +86,26 @@
       document.getElementById("status").innerText = txt;
     });
 
+    async function approveBot() {
+      const res = await fetch("/approve-bot");
+      const txt = await res.text();
+      document.getElementById("status").innerText = txt;
+    }
+
     async function stopBot() {
       const res = await fetch("/stop-bot");
       const txt = await res.text();
       document.getElementById("status").innerText = txt;
     }
 
-    // Live log polling
     setInterval(() => {
-      fetch("/logs")
-        .then(res => res.text())
-        .then(t => {
-          const logBox = document.getElementById("logs");
-          logBox.innerText = t;
-          logBox.scrollTop = logBox.scrollHeight;
-        });
-
-      fetch("/status")
-        .then(res => res.text())
-        .then(t => document.getElementById("status").innerText = t);
-    }, 2000);
+      fetch("/status").then(res => res.text()).then(t => document.getElementById("status").innerText = t);
+      fetch("/logs").then(res => res.text()).then(t => {
+        const box = document.getElementById("logs");
+        box.innerText = t;
+        box.scrollTop = box.scrollHeight;
+      });
+    }, 3000);
   </script>
 </body>
 </html>
