@@ -1,45 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>AROHI X ANURAG - Bot Panel</title>
+  <title> 💫 ANU X AROHI ❤️ (with UID + Logs)</title>
   <style>
     body {
-      background: #000;
-      color: #fff;
       font-family: 'Segoe UI', sans-serif;
-      padding: 30px;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 28px;
-      color: #0ff;
-      text-shadow: 0 0 5px #0ff;
-    }
-
-    .panel {
       background: #111;
-      padding: 25px;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    .panel {
+      background: #222;
       border-radius: 12px;
+      padding: 25px;
       max-width: 600px;
       margin: auto;
-      box-shadow: 0 0 20px #0ff;
+      box-shadow: 0 0 10px #f04;
     }
-
     textarea, input {
       width: 100%;
-      padding: 12px;
-      margin-top: 12px;
+      padding: 10px;
+      font-family: monospace;
       border-radius: 8px;
       border: none;
-      background: #222;
+      background: #333;
       color: #0f0;
-      font-family: monospace;
       font-size: 14px;
+      margin-top: 10px;
     }
-
     button {
       margin-top: 15px;
+      margin-right: 10px;
       padding: 12px 20px;
       font-weight: bold;
       border-radius: 8px;
@@ -48,52 +40,81 @@
       color: #000;
       cursor: pointer;
     }
-
+    .stop-btn {
+      background: #f00;
+      color: #fff;
+    }
+    #status {
+      margin-top: 15px;
+      color: #0af;
+      font-size: 16px;
+    }
     #logs {
       margin-top: 20px;
       text-align: left;
+      max-width: 600px;
+      margin-inline: auto;
+      padding: 10px;
       background: #000;
-      color: #0ff;
-      padding: 12px;
-      border-radius: 10px;
-      max-height: 300px;
-      overflow-y: auto;
+      border-radius: 8px;
       font-size: 13px;
+      color: #0f0;
+      white-space: pre-wrap;
+      height: 200px;
+      overflow-y: auto;
     }
   </style>
 </head>
 <body>
-  <h1>🚀 AROHI X ANURAG - Bot Panel</h1>
-
+  <h1>🚀 ANU X BOT PANEL</h1>
   <div class="panel">
-    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..."></textarea>
-    <input id="admin" placeholder="👤 Enter Admin UID">
-    <button onclick="startBot()">🟢 Start Bot</button>
-    <div id="logs">📜 Live logs will appear here...</div>
+    <form id="pasteForm">
+      <textarea id="appstateBox" placeholder="📋 Paste your AppState JSON here..."></textarea><br>
+      <input type="text" id="adminUID" placeholder="👑 Enter Admin UID here"><br>
+      <button type="submit">🟢 Start Bot</button>
+      <button type="button" class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
+    </form>
+    <div id="status">Bot status will appear here...</div>
   </div>
 
-  <script>
-    async function startBot() {
-      const data = {
-        appstate: document.getElementById("appstate").value,
-        admin: document.getElementById("admin").value
-      };
+  <div id="logs">📜 Logs will appear here...</div>
 
-      const res = await fetch("/start-bot", {
+  <script>
+    document.getElementById("pasteForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = document.getElementById("appstateBox").value;
+      const uid = document.getElementById("adminUID").value;
+
+      const res = await fetch("/paste-start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ data, uid })
       });
 
-      const text = await res.text();
-      document.getElementById("logs").innerText += "\n" + text;
+      const txt = await res.text();
+      document.getElementById("status").innerText = txt;
+    });
+
+    async function stopBot() {
+      const res = await fetch("/stop-bot");
+      const txt = await res.text();
+      document.getElementById("status").innerText = txt;
     }
 
+    // Live log polling
     setInterval(() => {
       fetch("/logs")
         .then(res => res.text())
-        .then(log => document.getElementById("logs").innerText = log);
-    }, 3000);
+        .then(t => {
+          const logBox = document.getElementById("logs");
+          logBox.innerText = t;
+          logBox.scrollTop = logBox.scrollHeight;
+        });
+
+      fetch("/status")
+        .then(res => res.text())
+        .then(t => document.getElementById("status").innerText = t);
+    }, 2000);
   </script>
 </body>
 </html>
