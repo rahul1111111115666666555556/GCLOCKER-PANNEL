@@ -1,72 +1,59 @@
 const express = require("express");
-const { fork } = require("child_process");
 const fs = require("fs");
+const { fork } = require("child_process");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const USERS_DIR = path.join(__dirname, "users");
+const MAX_USERS = 20;
 
-let botProcess = null;
-let logs = "";
+if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR);
 
-app.use(express.json());
 app.use(express.static("public"));
+app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/index.html");
-});
+let processes = {}; // UID => child process
 
-// Paste AppState + Admin UID + Start Bot
-app.post("/paste-start", (req, res) => {
-  const { data, uid } = req.body;
+app.post("/start-bot", (req, res) => {
+  const { appstate, admin } = req.body;
+  if (!appstate || !admin) return res.send("❌ AppState or Admin UID missing!");
+
+  const userDir = path.join(USERS_DIR, admin);
+  const existingUsers = fs.readdirSync(USERS_DIR).filter(uid =>
+    fs.existsSync(path.join(USERS_DIR, uid, "appstate.json"))
+  );
+
+  // ✅ 20 user limit logic
+  if (!existingUsers.includes(admin) && existingUsers.length >= MAX_USERS) {
+    return res.send("❌ Limit reached: Only 20 users allowed.");
+  }
+
+  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
 
   try {
-    JSON.parse(data);
-    fs.writeFileSync("appstate.json", data);
-    fs.writeFileSync("admin.txt", uid || "");
+    fs.writeFileSync(path.join(userDir, "appstate.json"), JSON.stringify(JSON.parse(appstate), null, 2));
+    fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
 
-    if (botProcess) return res.send("⚠️ Bot already running.");
+    if (processes[admin]) processes[admin].kill();
+    processes[admin] = fork("bot.js", [admin]);
 
-    botProcess = fork("bot.js");
-
-    botProcess.stdout.on("data", (d) => {
-      logs += d.toString();
-      if (logs.length > 5000) logs = logs.slice(-5000); // trim
-    });
-
-    botProcess.stderr.on("data", (d) => {
-      logs += "[ERR] " + d.toString();
-      if (logs.length > 5000) logs = logs.slice(-5000);
-    });
-
-    botProcess.on("exit", () => {
-      logs += "\n[Bot exited]";
-      botProcess = null;
-    });
-
-    res.send("🟢 Bot started successfully!");
-  } catch (err) {
+    res.send(`✅ Bot started for UID: ${admin}`);
+  } catch (e) {
     res.send("❌ Invalid AppState JSON!");
   }
 });
 
-// Stop Bot
-app.get("/stop-bot", (req, res) => {
-  if (!botProcess) return res.send("⚠️ Bot is not running.");
-  botProcess.kill();
-  botProcess = null;
-  res.send("🔴 Bot stopped successfully!");
-});
-
-// Show Status
-app.get("/status", (req, res) => {
-  res.send(botProcess ? "🟢 Bot is running" : "🔴 Bot is stopped");
-});
-
-// Show Logs
 app.get("/logs", (req, res) => {
-  res.send(logs || "📭 No logs yet...");
+  const uid = req.query.uid;
+  if (!uid) return res.send("❌ UID missing in query.");
+
+  const logPath = path.join(USERS_DIR, uid, "logs.txt");
+  if (!fs.existsSync(logPath)) return res.send("📭 No logs yet.");
+
+  res.send(fs.readFileSync(logPath, "utf-8"));
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 Panel running at http://localhost:${PORT}`);
+  console.log(`🌐 AROHI X ANURAG multi-user panel running on port ${PORT}`);
 });
