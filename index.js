@@ -3,7 +3,6 @@ const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
-const multer = require("multer");
 
 const app = express();
 const server = http.createServer(app);
@@ -13,9 +12,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const upload = multer(); // For future if needed, currently not used
-
-// Keep track of running bots: { uid: childProcess }
 const bots = new Map();
 
 function ensureUserDir(uid) {
@@ -26,7 +22,9 @@ function ensureUserDir(uid) {
 
 app.post("/start-bot", (req, res) => {
   const { appstate, admin, automsg, speed } = req.body;
-  if (!appstate || !admin) return res.status(400).send("AppState and Admin UID required.");
+  if (!appstate || !admin || !automsg) {
+    return res.status(400).send("AppState, Admin UID and AutoMsg are required.");
+  }
 
   if (bots.has(admin)) {
     return res.status(400).send("Bot already running for this UID.");
@@ -34,19 +32,17 @@ app.post("/start-bot", (req, res) => {
 
   const userDir = ensureUserDir(admin);
 
-  // Save files
   try {
     fs.writeFileSync(path.join(userDir, "appstate.json"), appstate, "utf-8");
     fs.writeFileSync(path.join(userDir, "admin.txt"), admin, "utf-8");
-    fs.writeFileSync(path.join(userDir, "automsg.txt"), automsg || "", "utf-8");
-    const speedVal = parseInt(speed, 10);
-    fs.writeFileSync(path.join(userDir, "speed.txt"), (!isNaN(speedVal) && speedVal >= 5) ? String(speedVal) : "40", "utf-8");
+    fs.writeFileSync(path.join(userDir, "automsg.txt"), automsg, "utf-8");
+    const spd = parseInt(speed, 10);
+    fs.writeFileSync(path.join(userDir, "speed.txt"), (!isNaN(spd) && spd >= 5) ? String(spd) : "40", "utf-8");
   } catch (e) {
     return res.status(500).send("Failed to save user data: " + e.message);
   }
 
-  // Spawn bot.js child process
-  const botProcess = spawn("node", ["bot.js", admin, automsg || ""]);
+  const botProcess = spawn("node", ["bot.js", admin]);
 
   botProcess.stdout.on("data", (data) => {
     const logLine = data.toString();
