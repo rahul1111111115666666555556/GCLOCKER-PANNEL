@@ -78,6 +78,7 @@
       margin: 10px 0 5px;
       font-weight: bold;
       color: #f0f;
+      text-align: left;
     }
   </style>
 </head>
@@ -91,6 +92,9 @@
     <label for="automsgFile">📁 Upload Auto Reply Message File</label>
     <input type="file" id="automsgFile" accept=".txt" />
 
+    <label for="speed">⏱️ Set Auto Reply Speed (seconds)</label>
+    <input type="number" id="speed" placeholder="Enter seconds (e.g. 40)" min="5" max="300" value="40" />
+
     <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
     <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
 
@@ -98,15 +102,13 @@
   </div>
 
   <script>
-    // Store uploaded file content globally
-    window.autoReplyMessage = "";
-
+    let autoReplyMessage = "";
     document.getElementById("automsgFile").addEventListener("change", function(e) {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        window.autoReplyMessage = e.target.result;
+        autoReplyMessage = e.target.result;
       };
       reader.readAsText(file);
     });
@@ -114,14 +116,16 @@
     function startBot() {
       const appstate = document.getElementById("appstate").value.trim();
       const admin = document.getElementById("uid").value.trim();
-      const automsg = window.autoReplyMessage || "";
+      const speed = document.getElementById("speed").value.trim();
 
       if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
+      if (!autoReplyMessage) return alert("❌ Upload Auto Reply Message file!");
+      if (!speed || isNaN(speed) || speed < 5) return alert("❌ Enter valid speed (min 5 seconds)!");
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appstate, admin, automsg })
+        body: JSON.stringify({ appstate, admin, automsg: autoReplyMessage, speed: Number(speed) })
       }).then(res => res.text()).then(alert);
     }
 
