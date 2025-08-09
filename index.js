@@ -9,22 +9,18 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-const bots = new Map(); // Map<UID, ChildProcess>
-
+const bots = new Map();
 const USERS_DIR = path.join(__dirname, "users");
 if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
 
-// POST /start-bot
 app.post("/start-bot", (req, res) => {
   const { appstate, admin, automsg } = req.body;
   if (!appstate || !admin) return res.status(400).send("AppState and Admin UID required.");
 
-  const uid = admin; // UID used as folder & bot key
-
+  const uid = admin;
   const userDir = path.join(USERS_DIR, uid);
   if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
 
-  // Save files
   try {
     fs.writeFileSync(path.join(userDir, "appstate.json"), appstate);
     fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
@@ -36,14 +32,11 @@ app.post("/start-bot", (req, res) => {
     return res.status(500).send("Failed to save files.");
   }
 
-  // If bot is already running for this UID, kill first
   if (bots.has(uid)) {
     bots.get(uid).kill();
     bots.delete(uid);
   }
 
-  // Spawn bot.js process
-  // Pass UID and automsg as args
   const botProcess = spawn("node", [
     path.join(__dirname, "bot.js"),
     uid,
@@ -65,10 +58,9 @@ app.post("/start-bot", (req, res) => {
 
   bots.set(uid, botProcess);
 
-  return res.send(`Bot started for UID ${uid}`);
+  res.send(`Bot started for UID ${uid}`);
 });
 
-// GET /stop-bot?uid=...
 app.get("/stop-bot", (req, res) => {
   const uid = req.query.uid;
   if (!uid) return res.status(400).send("UID query param required.");
@@ -82,7 +74,6 @@ app.get("/stop-bot", (req, res) => {
   }
 });
 
-// GET /logs?uid=...
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
   if (!uid) return res.status(400).send("UID query param required.");
@@ -96,7 +87,6 @@ app.get("/logs", (req, res) => {
   });
 });
 
-// Helper to append logs to logs.txt
 function appendLog(uid, text) {
   const logFile = path.join(USERS_DIR, uid, "logs.txt");
   fs.appendFile(logFile, text, (err) => {
