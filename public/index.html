@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>AROHI X ANURAG BOT PANEL</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
       background: #0a0a0a;
@@ -33,6 +33,7 @@
       border: none;
       border-radius: 8px;
       font-family: monospace;
+      font-size: 14px;
     }
     button {
       padding: 12px 20px;
@@ -70,20 +71,22 @@
       margin: 10px 0 5px;
       font-weight: bold;
       color: #f0f;
+      text-align: left;
     }
   </style>
 </head>
 <body>
   <h1>🚀 AROHI X ANURAG BOT PANEL</h1>
+
   <div class="panel">
     <input id="uid" placeholder="👑 Paste your Admin UID..." />
-    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..."></textarea>
+    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..." rows="8"></textarea>
 
-    <label for="automsgFile">📁 Upload Auto Reply Message File</label>
+    <label for="automsgFile">📁 Upload Auto Reply Message File (.txt)</label>
     <input type="file" id="automsgFile" accept=".txt" />
 
-    <label for="speedInput">⏱️ Auto Reply Speed (seconds, min 5)</label>
-    <input type="number" id="speedInput" min="5" value="40" />
+    <label for="speed">⏱️ Message Speed (seconds, min 5, default 40)</label>
+    <input type="number" id="speed" min="5" max="300" value="40" />
 
     <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
     <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
@@ -99,7 +102,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        autoReplyMessage = e.target.result.trim();
+        autoReplyMessage = e.target.result;
       };
       reader.readAsText(file);
     });
@@ -107,32 +110,53 @@
     function startBot() {
       const appstate = document.getElementById("appstate").value.trim();
       const admin = document.getElementById("uid").value.trim();
-      const speed = document.getElementById("speedInput").value.trim();
+      const speed = document.getElementById("speed").value.trim();
 
-      if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
-      if (!autoReplyMessage) return alert("❌ Upload Auto Reply Message file!");
-      if (isNaN(speed) || speed < 5) return alert("❌ Speed must be at least 5 seconds.");
+      if (!appstate || !admin) {
+        alert("❌ Enter AppState and Admin UID!");
+        return;
+      }
+      if (speed && (isNaN(speed) || speed < 5)) {
+        alert("❌ Speed must be a number >= 5");
+        return;
+      }
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appstate, admin, automsg: autoReplyMessage, speed }),
-      }).then(res => res.text()).then(alert);
+        body: JSON.stringify({
+          appstate,
+          admin,
+          automsg: autoReplyMessage,
+          speed,
+        }),
+      })
+        .then((res) => res.text())
+        .then((text) => alert(text))
+        .catch((err) => alert("❌ Error: " + err));
     }
 
     function stopBot() {
       const uid = document.getElementById("uid").value.trim();
-      if (!uid) return alert("❌ Enter UID to stop bot.");
-
-      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(alert);
+      if (!uid) {
+        alert("❌ Enter Admin UID to stop bot.");
+        return;
+      }
+      fetch(`/stop-bot?uid=${uid}`)
+        .then((res) => res.text())
+        .then((text) => alert(text))
+        .catch((err) => alert("❌ Error: " + err));
     }
 
     setInterval(() => {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return;
-      fetch(`/logs?uid=${uid}`).then(res => res.text()).then(log => {
-        document.getElementById("logs").innerText = log;
-      });
+      fetch(`/logs?uid=${uid}`)
+        .then((res) => res.text())
+        .then((logs) => {
+          document.getElementById("logs").innerText = logs;
+        })
+        .catch(() => {});
     }, 3000);
   </script>
 </body>
