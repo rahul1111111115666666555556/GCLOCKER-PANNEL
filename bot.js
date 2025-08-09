@@ -5,7 +5,7 @@ const path = require("path");
 
 const uid = process.argv[2];
 if (!uid) {
-  console.error("❌ UID argument missing");
+  console.error("❌ UID argument missing. Usage: node bot.js <UID>");
   process.exit(1);
 }
 
@@ -22,33 +22,38 @@ function log(msg) {
   fs.appendFileSync(logPath, line + "\n");
 }
 
-let appState, BOSS_UID, autoMessage = "", speed = 40;
-
+let appState;
 try {
-  appState = JSON.parse(fs.readFileSync(appStatePath, "utf-8"));
-} catch {
-  log("❌ appstate.json invalid or missing");
+  const raw = fs.readFileSync(appStatePath, "utf-8");
+  if (!raw.trim()) throw new Error("File is empty");
+  appState = JSON.parse(raw);
+} catch (err) {
+  log("❌ appstate.json is invalid or empty.");
   process.exit(1);
 }
 
+let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
-  if (!BOSS_UID) throw new Error("admin.txt empty");
-} catch {
-  log("❌ admin.txt invalid or missing");
+  if (!BOSS_UID) throw new Error("UID missing");
+} catch (err) {
+  log("❌ admin.txt is invalid or empty.");
   process.exit(1);
 }
 
+let autoMessage = "";
 try {
   autoMessage = fs.readFileSync(autoMsgPath, "utf-8").trim();
+  if (!autoMessage) log("⚠️ Warning: automsg.txt is empty.");
 } catch {
-  log("⚠️ automsg.txt missing or empty");
+  log("⚠️ automsg.txt not found or empty.");
   autoMessage = "";
 }
 
+let speed = 40;
 try {
-  speed = parseInt(fs.readFileSync(speedPath, "utf-8").trim());
-  if (isNaN(speed) || speed < 10) speed = 40;
+  const sp = fs.readFileSync(speedPath, "utf-8").trim();
+  if (sp && !isNaN(sp)) speed = Math.max(10, Math.min(300, Number(sp)));
 } catch {
   speed = 40;
 }
@@ -65,17 +70,8 @@ const loginOptions = {
 };
 
 const abusiveWords = [
-  "bc",
-  "mc",
-  "bcchod",
-  "chutiya",
-  "chod",
-  "lund",
-  "gandu",
-  "madarchod",
-  "behanchod",
-  "bhadwa",
-  "haramkhor",
+  "bc", "mc", "bcchod", "chutiya", "chod", "lund", "gandu",
+  "madarchod", "behanchod", "bhadwa", "haramkhor",
 ];
 
 function containsAbuse(text) {
@@ -84,42 +80,36 @@ function containsAbuse(text) {
 }
 
 const abuseCooldown = new Map();
+const COOLDOWN_MS = speed * 1000;
 
-login(loginOptions, (err, api) => {
-  if (err) return log("❌ LOGIN FAILED: " + err);
+login(loginOptions, async (err, api) => {
+  if (err) {
+    log("❌ [LOGIN FAILED]: " + err);
+    process.exit(1);
+  }
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  log("🤖 BOT ONLINE — Ready to serve!");
+  log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
-  // Anti-sleep (typing indicator)
+  // Anti-sleep indicator every 5 mins
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      log("💤 Bot alive signal sent");
+      log("💤 Bot is active... still alive ✅");
     }
   }, 300000);
 
-  // Appstate auto-save
+  // Auto save appstate every 10 mins
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
       fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      log("💾 Appstate saved");
+      log("💾 Appstate saved ✅");
     } catch (e) {
       log("❌ Appstate save failed: " + e);
     }
   }, 600000);
-
-  // Auto abuse message interval (if autoMessage set)
-  if (autoMessage) {
-    setInterval(() => {
-      if (GROUP_THREAD_ID) {
-        api.sendMessage(autoMessage, GROUP_THREAD_ID);
-        log("💬 Auto reply sent");
-      }
-    }, speed * 1000);
-  }
 
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
@@ -132,84 +122,89 @@ login(loginOptions, (err, api) => {
       log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
     }
 
-    // Ignore if sender not boss and command received
-    if (senderID !== BOSS_UID) return;
+    // Group Name Lock: /gclock [new name]
+    if (event.type === "message" && body.startsWith("/gclock")) {
+      if (senderID !== BOSS_UID) return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
 
-    // /help command
-    if (body === "/help") {
-      const helpText = `
-Commands:
-- /gclock <new group name> : Lock group name
-- /gclock remove : Unlock group name (restore original)
-- /nicklock on : Enable nickname lock
-- /nicklock off : Disable nickname lock
-- /abuse : Start auto abuse messages
-- /stopabuse : Stop auto abuse messages
-      `.trim();
-      api.sendMessage(helpText, threadID);
-      return;
-    }
-
-    // /gclock command
-    if (body.startsWith("/gclock")) {
+      const newName = event.body.slice(7).trim();
       GROUP_THREAD_ID = threadID;
 
-      if (body.includes("remove")) {
-        // unlock group
+      if (newName.length > 0) {
+        await api.setTitle(newName, threadID);
+        LOCKED_GROUP_NAME = newName;
+        api.sendMessage(`🔒 Naam lock ho gaya: "${LOCKED_GROUP_NAME}"`, threadID);
+      } else {
         try {
           const info = await api.getThreadInfo(threadID);
-          await api.setTitle(info.threadName, threadID);
-          LOCKED_GROUP_NAME = null;
-          api.sendMessage("🔓 Group name unlocked.", threadID);
-          log("Group name unlocked");
-        } catch (e) {
-          api.sendMessage("❌ Failed to unlock group name.", threadID);
-          log("Unlock group name error: " + e);
+          if (info && info.threadName) {
+            LOCKED_GROUP_NAME = info.threadName;
+            api.sendMessage(`🔒 Naam lock ho gaya: "${LOCKED_GROUP_NAME}"`, threadID);
+          } else {
+            api.sendMessage("❌ Naam lock karne mein problem hui.", threadID);
+          }
+        } catch {
+          api.sendMessage("❌ Naam lock karne mein problem hui.", threadID);
         }
+      }
+    }
+
+    // Nickname Lock: /nicklock on/off
+    if (event.type === "message" && body.startsWith("/nicklock")) {
+      if (senderID !== BOSS_UID) return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
+
+      const arg = event.body.slice(9).trim().toLowerCase();
+      if (arg === "on") {
+        nickLockEnabled = true;
+        originalNicknames = {};
+        api.sendMessage("🔒 Nickname lock on ho gaya", threadID);
+      } else if (arg === "off") {
+        nickLockEnabled = false;
+        api.sendMessage("🔓 Nickname lock off ho gaya", threadID);
       } else {
-        const newName = event.body.slice(7).trim();
-        if (!newName) {
-          api.sendMessage("❌ Provide a name after /gclock", threadID);
-          return;
-        }
+        api.sendMessage("❌ Invalid argument. Use /nicklock on or /nicklock off", threadID);
+      }
+    }
+
+    // Enforce nickname lock when enabled
+    if (nickLockEnabled && event.type === "event" && event.logMessageType === "log:thread-nickname") {
+      const changedUser = event.logMessageData && event.logMessageData.participant_id;
+      if (!changedUser) return;
+
+      if (!originalNicknames[changedUser]) {
         try {
-          await api.setTitle(newName, threadID);
-          LOCKED_GROUP_NAME = newName;
-          api.sendMessage(`🔒 Group name locked to "${newName}"`, threadID);
-          log(`Group locked with name "${newName}"`);
-        } catch (e) {
-          api.sendMessage("❌ Failed to lock group name.", threadID);
-          log("Lock group name error: " + e);
-        }
+          const info = await api.getThreadInfo(threadID);
+          if (info.nicknames && info.nicknames[changedUser]) {
+            originalNicknames[changedUser] = info.nicknames[changedUser];
+          }
+        } catch {}
       }
-      return;
+
+      // Reset nickname back if changed
+      if (originalNicknames[changedUser]) {
+        try {
+          await api.changeNickname(originalNicknames[changedUser], threadID, changedUser);
+          log(`🔄 Reset nickname for ${changedUser}`);
+        } catch {}
+      }
     }
 
-    // /nicklock commands
-    if (body === "/nicklock on") {
-      nickLockEnabled = true;
-      api.sendMessage("🔒 Nickname lock enabled.", threadID);
-      log("Nickname lock enabled");
-      return;
-    }
-    if (body === "/nicklock off") {
-      nickLockEnabled = false;
-      api.sendMessage("🔓 Nickname lock disabled.", threadID);
-      log("Nickname lock disabled");
-      return;
-    }
+    // Auto abuse for abusive messages
+    if (event.type === "message" && containsAbuse(event.body) && senderID !== BOSS_UID) {
+      const key = `${threadID}_${senderID}`;
+      const last = abuseCooldown.get(key) || 0;
+      const now = Date.now();
 
-    // Abuse checker - auto abuse mentioned user if message contains abusive words
-    if (nickLockEnabled && event.type === "message" && event.mentions && event.mentions[BOSS_UID]) {
-      const text = event.body || "";
-      if (containsAbuse(text)) {
-        const lastAbuseTime = abuseCooldown.get(senderID) || 0;
-        if (Date.now() - lastAbuseTime > speed * 1000) {
-          api.sendMessage(autoMessage, threadID);
-          abuseCooldown.set(senderID, Date.now());
-          log(`Abused ${senderID}`);
+      if (now - last > COOLDOWN_MS) {
+        abuseCooldown.set(key, now);
+        if (autoMessage && autoMessage.length > 0) {
+          await api.sendMessage(autoMessage, threadID);
+          log(`🚫 Auto abused ${senderID} in ${threadID}`);
         }
       }
     }
-  });
-});
+
+    // /abuse command to abuse mentioned users or sender
+    if (event.type === "message" && body.startsWith("/abuse")) {
+      if (senderID !== BOSS_UID) return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
+
+      let mention
