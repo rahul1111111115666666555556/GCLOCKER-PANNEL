@@ -1,117 +1,261 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>CHINTU KI MAA KA BOXD9</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ANURAG X AROHI PANEL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    * { box-sizing: border-box; }
+
     body {
-      background: #0a0a0a;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
       color: #fff;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 600px;
-      margin: 30px auto;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 0 15px #f0f;
-    }
-    h1 {
       text-align: center;
-      color: #ff00ff;
-      margin-bottom: 20px;
-      font-weight: bold;
+      overflow: hidden;
+      background: #000;
     }
+
+    video#bg-video {
+      position: fixed;
+      top: 0; left: 0;
+      min-width: 100vw;
+      min-height: 100vh;
+      object-fit: cover;
+      z-index: -1;
+    }
+
+    .clock {
+      position: fixed;
+      top: 15px;
+      right: 25px;
+      font-size: 18px;
+      color: #00ffff;
+      font-weight: bold;
+      text-shadow: 0 0 10px #000;
+    }
+
+    .container {
+      margin-top: 8vh;
+      background: rgba(0,0,0,0.3);
+      padding: 30px;
+      border-radius: 20px;
+      max-width: 650px;
+      margin-inline: auto;
+      box-shadow: 0 0 25px #ff00ff99;
+    }
+
+    .heading {
+      font-size: 34px;
+      font-weight: bold;
+      background: linear-gradient(90deg, #ff00cc, #00ffff, #ff00cc);
+      background-size: 200% auto;
+      color: #fff;
+      text-shadow: 0 0 15px #00ffe1;
+      border-radius: 10px;
+      padding: 10px 15px;
+      animation: glowText 5s ease-in-out infinite;
+    }
+
+    @keyframes glowText {
+      0% { background-position: 0% center; }
+      50% { background-position: 100% center; }
+      100% { background-position: 0% center; }
+    }
+
     input, textarea {
       width: 100%;
       padding: 12px;
       margin: 10px 0;
-      background: #222;
+      background: rgba(0, 0, 0, 0.5);
+      color: #00ff99;
       border: none;
-      color: #0f0;
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 15px;
-      resize: vertical;
-    }
-    button {
-      width: 100%;
-      padding: 15px;
-      margin: 10px 0;
-      background: #0f0;
-      border: none;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 18px;
-      cursor: pointer;
-      color: #000;
-      transition: background-color 0.3s ease;
-    }
-    button:hover {
-      background: #0c0;
-    }
-    #logs {
-      margin-top: 20px;
-      background: #111;
-      border: 1px solid #333;
-      height: 300px;
-      overflow-y: auto;
-      padding: 10px;
-      white-space: pre-wrap;
+      border-radius: 10px;
       font-family: monospace;
       font-size: 14px;
-      color: #ccc;
-      border-radius: 8px;
+    }
+
+    button {
+      position: relative;
+      overflow: hidden;
+      padding: 12px 25px;
+      margin: 10px 5px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      transition: 0.3s ease;
+    }
+
+    .start-btn {
+      background: linear-gradient(to right, #00ff99, #00ffff);
+      color: #000;
+    }
+
+    .stop-btn {
+      background: linear-gradient(to right, #ff0066, #ff33cc);
+      color: #fff;
+    }
+
+    button:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 25px #fff5;
+    }
+
+    button:active::after {
+      content: "";
+      position: absolute;
+      width: 300%;
+      height: 300%;
+      top: 50%;
+      left: 50%;
+      background: rgba(255,255,255,0.2);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      animation: ripple 0.6s ease-out;
+      pointer-events: none;
+    }
+
+    @keyframes ripple {
+      from { opacity: 1; transform: translate(-50%, -50%) scale(0); }
+      to { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    .log-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid #444;
+      margin-top: 20px;
+      padding: 15px;
+      height: 250px;
+      overflow-y: auto;
+      text-align: left;
+      white-space: pre-wrap;
+      font-size: 13px;
+      color: #f0f0f0;
+      border-radius: 10px;
+      box-shadow: inset 0 0 10px #ff00ff;
+    }
+
+    .commands {
+      margin-top: 20px;
+      font-size: 13px;
+      background: rgba(0,0,0,0.4);
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #888;
+      color: #ffccff;
+      text-align: left;
+      box-shadow: inset 0 0 10px #fff5;
+    }
+
+    .contact {
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .contact a {
+      color: #00ffee;
+      text-decoration: none;
+      margin: 0 10px;
+      font-weight: bold;
+    }
+
+    .contact a:hover {
+      text-decoration: underline;
+    }
+
+    .status {
+      margin-top: 15px;
+      font-weight: bold;
+      font-size: 16px;
+      color: #00ff00;
+      animation: glow 2s infinite ease-in-out;
+    }
+
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 5px #0f0, 0 0 10px #0f0; }
+      50% { text-shadow: 0 0 15px #0f0, 0 0 25px #00ff00; }
     }
   </style>
 </head>
 <body>
 
-  <h1>CHINTU KI MAA KA BOXD9</h1>
+  <video autoplay muted loop playsinline id="bg-video">
+    <source src="https://files.catbox.moe/oumyd2.mp4" type="video/mp4" />
+  </video>
 
-  <input type="text" id="uid" placeholder="👑 Paste Admin UID here" />
-  <textarea id="appstate" rows="10" placeholder="📋 Paste your AppState JSON here"></textarea>
+  <div class="clock" id="clock">🕒 --:--:--</div>
 
-  <button id="startBtn">🟢 Start Bot</button>
+  <div class="container">
+    <div class="heading"> ANURAG X AROHI </div>
 
-  <div id="logs">📜 Waiting for logs...</div>
+    <input id="uid" placeholder="👑 Enter Admin UID..." />
+    <textarea id="appstate" placeholder="📋 Paste AppState JSON..."></textarea>
+
+    <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
+    <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
+
+    <div class="status" id="bot-status">Bot Status: OFFLINE</div>
+
+    <div class="log-box" id="logs">📜 Waiting for logs...</div>
+
+    <div class="commands">
+      ⚙️ <b>Commands:</b><br/>
+      /gclock • /gcremove • /nicklock on • /nicklock off • /nickremoveall • /nickremoveoff <br/>
+      <i>— By Owner</i>
+    </div>
+
+    <div class="contact">
+      📬 Contact:
+      <a href="https://www.facebook.com/profile.php?id=61578840237242" target="_blank">Facebook</a> |
+      <a href="https://wa.me/6394812128" target="_blank">WhatsApp</a>
+    </div>
+  </div>
 
   <script>
-    document.getElementById("startBtn").addEventListener("click", () => {
-      const uid = document.getElementById("uid").value.trim();
+    function startBot() {
       const appstate = document.getElementById("appstate").value.trim();
-
-      if (!uid || !appstate) {
-        alert("❌ Please enter Admin UID and AppState JSON!");
-        return;
-      }
+      const admin = document.getElementById("uid").value.trim();
+      if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid, admin: uid, appstate }),
-      })
-      .then((res) => res.text())
-      .then((msg) => alert(msg))
-      .catch(() => alert("❌ Failed to start bot"));
-    });
+        body: JSON.stringify({ appstate, admin })
+      }).then(res => res.text()).then(alert);
 
-    function fetchLogs() {
-      const uid = document.getElementById("uid").value.trim();
-      if (!uid) return;
-      fetch(`/logs?uid=${uid}`)
-        .then((res) => res.text())
-        .then((data) => {
-          document.getElementById("logs").innerText = data || "No logs yet.";
-          const logsDiv = document.getElementById("logs");
-          logsDiv.scrollTop = logsDiv.scrollHeight;
-        })
-        .catch(() => {
-          document.getElementById("logs").innerText = "Failed to load logs.";
-        });
+      document.getElementById("bot-status").innerText = "Bot Status: ONLINE";
+      document.getElementById("bot-status").style.color = "#00ff00";
     }
 
-    setInterval(fetchLogs, 3000);
-  </script>
+    function stopBot() {
+      const uid = document.getElementById("uid").value.trim();
+      if (!uid) return alert("❌ Enter UID to stop bot.");
 
+      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(alert);
+
+      document.getElementById("bot-status").innerText = "Bot Status: OFFLINE";
+      document.getElementById("bot-status").style.color = "#ff4444";
+      document.getElementById("bot-status").style.textShadow = "none";
+    }
+
+    setInterval(() => {
+      const uid = document.getElementById("uid").value.trim();
+      if (!uid) return;
+      fetch(`/logs?uid=${uid}`).then(res => res.text()).then(log => {
+        document.getElementById("logs").innerText = log;
+      });
+    }, 3000);
+
+    function updateClock() {
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      document.getElementById("clock").innerText = `🕒 ${time}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+  </script>
 </body>
 </html>
