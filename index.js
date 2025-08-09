@@ -1,84 +1,74 @@
 const express = require("express");
-const http = require("http");
-const path = require("path");
 const fs = require("fs");
-const { spawn } = require("child_process");
-const helmet = require("helmet");
+const { fork } = require("child_process");
+const path = require("path");
 
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
+const USERS_DIR = path.join(__dirname, "users");
+const MAX_USERS = 20;
 
-app.use(helmet());
-app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json({ limit: "10mb" }));
+if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR);
 
-const usersDir = path.join(__dirname, "users");
-if (!fs.existsSync(usersDir)) fs.mkdirSync(usersDir, { recursive: true });
+app.use(express.static("public"));
+app.use(express.json());
 
-const bots = new Map();
+let processes = {}; // UID → bot process
 
+// ✅ Start Bot Handler
 app.post("/start-bot", (req, res) => {
-  const { uid, admin, appstate } = req.body;
+  const { appstate, admin } = req.body;
 
-  if (!uid || !admin || !appstate) {
-    return res.status(400).send("❌ Missing UID, Admin or AppState");
+  if (!appstate || !admin) return res.send("❌ AppState or UID missing!");
+
+  const userDir = path.join(USERS_DIR, admin);
+  const currentUsers = fs.readdirSync(USERS_DIR).filter(uid =>
+    fs.existsSync(path.join(USERS_DIR, uid, "appstate.json"))
+  );
+
+  if (!currentUsers.includes(admin) && currentUsers.length >= MAX_USERS) {
+    return res.send("❌ Limit reached: Only 20 users allowed.");
   }
 
-  const userDir = path.join(usersDir, uid);
-  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
 
   try {
-    fs.writeFileSync(path.join(userDir, "appstate.json"), appstate, "utf-8");
-    fs.writeFileSync(path.join(userDir, "admin.txt"), admin, "utf-8");
-  } catch (e) {
-    return res.status(500).send("❌ Failed to save user files");
+    // Save user appstate + admin UID
+    fs.writeFileSync(path.join(userDir, "appstate.json"), JSON.stringify(JSON.parse(appstate), null, 2));
+    fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
+    fs.writeFileSync(path.join(userDir, "logs.txt"), "📂 Logs started...\n");
+
+    // Kill existing if already running
+    if (processes[admin]) processes[admin].kill();
+
+    // Start bot process
+    processes[admin] = fork("bot.js", [admin]);
+
+    res.send(`✅ Bot started successfully for UID: ${admin}`);
+  } catch (err) {
+    console.error(err);
+    res.send("❌ Invalid AppState JSON or Internal Error.");
   }
-
-  if (bots.has(uid)) {
-    try {
-      bots.get(uid).kill();
-    } catch {}
-    bots.delete(uid);
-  }
-
-  const botProcess = spawn("node", ["bot.js", uid]);
-
-  bots.set(uid, botProcess);
-
-  botProcess.stdout.on("data", (data) => {
-    const logFile = path.join(userDir, "logs.txt");
-    fs.appendFileSync(logFile, data.toString());
-    console.log(`[BOT ${uid}] ${data.toString()}`);
-  });
-
-  botProcess.stderr.on("data", (data) => {
-    const logFile = path.join(userDir, "logs.txt");
-    fs.appendFileSync(logFile, data.toString());
-    console.error(`[BOT ${uid} ERR] ${data.toString()}`);
-  });
-
-  botProcess.on("exit", (code) => {
-    bots.delete(uid);
-    console.log(`[BOT ${uid}] exited with code ${code}`);
-  });
-
-  res.send(`✅ Bot started for UID: ${uid}`);
 });
 
+// ✅ Stop Bot Handler
+app.get("/stop-bot", (req, res) => {
+  const { uid } = req.query;
+  if (!uid || !processes[uid]) return res.send("⚠️ Bot not running.");
+  processes[uid].kill();
+  delete processes[uid];
+  res.send(`🔴 Bot stopped for UID: ${uid}`);
+});
+
+// ✅ Fetch Logs
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
-  if (!uid) return res.status(400).send("❌ Missing UID");
-
-  const logFile = path.join(usersDir, uid, "logs.txt");
-  if (!fs.existsSync(logFile)) return res.send("ℹ️ No logs yet.");
-
-  fs.readFile(logFile, "utf-8", (err, data) => {
-    if (err) return res.status(500).send("❌ Error reading logs");
-    res.send(data);
-  });
+  if (!uid) return res.send("❌ UID missing.");
+  const logPath = path.join(USERS_DIR, uid, "logs.txt");
+  if (!fs.existsSync(logPath)) return res.send("📭 No logs yet.");
+  res.send(fs.readFileSync(logPath, "utf8"));
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 AROHI X ANURAG panel running at http://localhost:${PORT}`);
 });
