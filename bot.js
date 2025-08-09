@@ -20,7 +20,7 @@ function log(msg) {
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
-  if (!raw.trim()) throw new Error("File is empty");
+  if (!raw.trim()) throw new Error("appstate.json empty");
   appState = JSON.parse(raw);
 } catch (err) {
   log("❌ appstate.json is invalid or empty.");
@@ -30,7 +30,7 @@ try {
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
-  if (!BOSS_UID) throw new Error("UID missing");
+  if (!BOSS_UID) throw new Error("admin.txt empty");
 } catch (err) {
   log("❌ admin.txt is invalid or empty.");
   process.exit(1);
@@ -39,42 +39,18 @@ try {
 let autoMessage = "";
 try {
   autoMessage = fs.readFileSync(autoMsgPath, "utf-8").trim();
-  if (!autoMessage) log("⚠️ Warning: automsg.txt is empty.");
+  if (!autoMessage) log("⚠️ automsg.txt is empty.");
 } catch {
   log("⚠️ automsg.txt not found or empty.");
   autoMessage = "";
 }
 
-let speedSec = 40; // default 40 sec
+let speed = 40;
 try {
-  const speedRaw = fs.readFileSync(speedPath, "utf-8").trim();
-  speedSec = parseInt(speedRaw, 10);
-  if (isNaN(speedSec) || speedSec < 5) speedSec = 40;
+  speed = parseInt(fs.readFileSync(speedPath, "utf-8"), 10);
+  if (isNaN(speed) || speed < 5) speed = 40;
 } catch {
-  log("⚠️ speed.txt not found or invalid, using default 40s.");
-}
-
-if (process.argv[3]) {
-  try {
-    fs.writeFileSync(autoMsgPath, process.argv[3], "utf-8");
-    autoMessage = process.argv[3];
-    log("💾 Auto reply message updated from start argument.");
-  } catch (e) {
-    log("❌ Failed to update auto reply message: " + e);
-  }
-}
-
-if (process.argv[4]) {
-  try {
-    let spd = parseInt(process.argv[4], 10);
-    if (!isNaN(spd) && spd >= 5) {
-      fs.writeFileSync(speedPath, String(spd), "utf-8");
-      speedSec = spd;
-      log("⏱️ Speed updated from start argument: " + spd + " seconds.");
-    }
-  } catch (e) {
-    log("❌ Failed to update speed: " + e);
-  }
+  log("⚠️ speed.txt not found or invalid, using 40 seconds.");
 }
 
 let GROUP_THREAD_ID = null;
@@ -82,12 +58,7 @@ let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
 
-const loginOptions = {
-  appState,
-  userAgent:
-    "Mozilla/5.0 (Linux; Android 12; Redmi Note 10 Pro Build/SKQ1.210908.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36",
-};
-
+let abuseTarget = null;
 const abusiveWords = [
   "bc",
   "mc",
@@ -108,7 +79,12 @@ function containsAbuse(text) {
 }
 
 const abuseCooldown = new Map();
-const COOLDOWN_MS = () => speedSec * 1000;
+
+const loginOptions = {
+  appState,
+  userAgent:
+    "Mozilla/5.0 (Linux; Android 12; Redmi Note 10 Pro Build/SKQ1.210908.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36",
+};
 
 login(loginOptions, async (err, api) => {
   if (err) return log("❌ [LOGIN FAILED]: " + err);
@@ -116,234 +92,196 @@ login(loginOptions, async (err, api) => {
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
   log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
-  // Anti-sleep typing indicator
+  // Anti-sleep typing indicator every 5 min
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      log("💤 Bot is active... still alive ✅");
+      log("💤 Bot is alive.");
     }
   }, 300000);
 
-  // Save appstate every 10 minutes
+  // Save appstate every 10 min
   setInterval(() => {
     try {
-      const newAppState = api.getAppState();
-      fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      log("💾 Appstate saved ✅");
+      const newState = api.getAppState();
+      fs.writeFileSync(appStatePath, JSON.stringify(newState, null, 2));
+      log("💾 Appstate saved.");
     } catch (e) {
-      log("❌ Appstate save failed: " + e);
+      log("❌ Failed to save appstate: " + e);
     }
   }, 600000);
 
-  // Auto message interval
-  setInterval(async () => {
-    if (GROUP_THREAD_ID && autoMessage) {
-      try {
-        await api.sendMessage(autoMessage, GROUP_THREAD_ID);
-        log("⏱️ Auto reply message sent.");
-      } catch (e) {
-        log("❌ Auto reply send error: " + e);
-      }
+  // Auto reply abusive messages timer (interval controlled by speed)
+  setInterval(() => {
+    if (GROUP_THREAD_ID && abuseTarget && autoMessage) {
+      api.sendMessage({
+        body: autoMessage,
+        mentions: [{ tag: "", id: abuseTarget }],
+      }, GROUP_THREAD_ID);
+      log(`⚠️ Sent auto abuse reply to ${abuseTarget}`);
     }
-  }, speedSec * 1000);
+  }, speed * 1000);
 
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
 
     const senderID = event.senderID;
     const threadID = event.threadID;
-    const bodyRaw = event.body || "";
-    const body = bodyRaw.toLowerCase();
+    const body = (event.body || "").toLowerCase();
 
     if (event.type === "message") {
-      log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
+      log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
     }
 
-    // Ignore own messages except commands
-    if (senderID === api.getCurrentUserID() && !body.startsWith("/")) return;
-
-    // COMMANDS
-    if (body.startsWith("/")) {
-      const args = body.trim().split(" ");
-      const cmd = args[0];
-
-      if (cmd === "/help") {
-        let helpMsg = 
-`🤖 BOT Commands:
-/gclock <name>  - Lock group name
-/gunlock        - Unlock group name
-/nicklock on    - Enable nickname lock
-/nicklock off   - Disable nickname lock
-/abuse          - Test abuse detection auto reply
-/help           - Show this help`;
-        await api.sendMessage(helpMsg, threadID);
-        return;
-      }
-
+    // Commands - only from BOSS_UID
+    if (event.type === "message" && body.startsWith("/")) {
       if (senderID !== BOSS_UID) {
-        await api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
+        api.sendMessage("⛔ Sirf boss hi commands chala sakta hai!", threadID);
         return;
       }
 
-      if (cmd === "/gclock") {
-        const newName = args.slice(1).join(" ").trim();
+      if (body.startsWith("/help")) {
+        const helpMsg = `🛠️ Commands:\n
+/gclock [name] - Lock group name
+/gunlock - Unlock group name
+/nicklock on - Enable nickname lock
+/nicklock off - Disable nickname lock
+/abuse @uid - Start auto abuse reply to tagged user
+/stopabuse - Stop auto abuse replies
+/automsg [text] - Update auto reply message
+/speed [seconds] - Update auto reply speed (min 5)
+`;
+        api.sendMessage(helpMsg, threadID);
+        return;
+      }
+
+      if (body.startsWith("/gclock")) {
+        const newName = event.body.slice(7).trim();
         if (!newName) {
-          await api.sendMessage("❌ Group name nahi diya.", threadID);
+          api.sendMessage("❌ Naam nahi diya /gclock ke saath!", threadID);
           return;
         }
         try {
           await api.setTitle(newName, threadID);
           LOCKED_GROUP_NAME = newName;
           GROUP_THREAD_ID = threadID;
-          await api.sendMessage(`🔒 Naam lock ho gaya: "${newName}"`, threadID);
-          log(`🔒 Group name locked: ${newName}`);
+          api.sendMessage(`🔒 Group name locked as: "${LOCKED_GROUP_NAME}"`, threadID);
+          return;
         } catch (e) {
-          await api.sendMessage("❌ Naam lock karte waqt error aaya.", threadID);
-          log("❌ /gclock error: " + e);
-        }
-        return;
-      }
-
-      if (cmd === "/gunlock") {
-        if (!LOCKED_GROUP_NAME || threadID !== GROUP_THREAD_ID) {
-          await api.sendMessage("❌ Group name pehle lock nahi hai ya ye group nahi hai.", threadID);
+          api.sendMessage("❌ Group name lock failed: " + e.message, threadID);
           return;
         }
-        try {
-          const info = await api.getThreadInfo(threadID);
-          await api.setTitle(info.name, threadID);
-          LOCKED_GROUP_NAME = null;
-          GROUP_THREAD_ID = null;
-          await api.sendMessage("🔓 Naam lock hata diya gaya.", threadID);
-          log("🔓 Group name unlock hua.");
-        } catch (e) {
-          await api.sendMessage("❌ Naam unlock karte waqt error aaya.", threadID);
-          log("❌ /gunlock error: " + e);
-        }
+      }
+
+      if (body.startsWith("/gunlock")) {
+        LOCKED_GROUP_NAME = null;
+        api.sendMessage("🔓 Group name unlock kar diya gaya.", threadID);
         return;
       }
 
-      if (cmd === "/nicklock") {
-        const param = args[1];
-        if (param === "on") {
-          nickLockEnabled = true;
-          originalNicknames = {};
-          await api.sendMessage("🔒 Nickname lock on kar diya.", threadID);
-          log("🔒 Nickname lock enabled.");
-        } else if (param === "off") {
-          nickLockEnabled = false;
-          originalNicknames = {};
-          await api.sendMessage("🔓 Nickname lock off kar diya.", threadID);
-          log("🔓 Nickname lock disabled.");
-        } else {
-          await api.sendMessage("❌ Usage: /nicklock on | off", threadID);
-        }
+      if (body.startsWith("/nicklock on")) {
+        nickLockEnabled = true;
+        originalNicknames = {};
+        api.sendMessage("✅ Nickname lock enabled.", threadID);
         return;
       }
 
-      if (cmd === "/abuse") {
-        // Just test abuse reply
-        if (!autoMessage) {
-          await api.sendMessage("⚠️ Auto reply message empty.", threadID);
+      if (body.startsWith("/nicklock off")) {
+        nickLockEnabled = false;
+        originalNicknames = {};
+        api.sendMessage("❌ Nickname lock disabled.", threadID);
+        return;
+      }
+
+      if (body.startsWith("/automsg ")) {
+        const newMsg = event.body.slice(9).trim();
+        if (!newMsg) {
+          api.sendMessage("❌ Auto message empty hai.", threadID);
           return;
         }
-        const mention = [
-          {
-            tag: `@${senderID}`,
-            id: senderID,
-            fromIndex: 0,
-            length: senderID.length + 1,
-          },
-        ];
-        await api.sendMessage(
-          {
-            body: `@${senderID} ${autoMessage}`,
-            mentions: mention,
-          },
-          threadID
-        );
-        log(`⚠️ /abuse command by ${senderID}, sent auto reply.`);
+        autoMessage = newMsg;
+        fs.writeFileSync(autoMsgPath, newMsg);
+        api.sendMessage("💾 Auto reply message updated.", threadID);
+        return;
+      }
+
+      if (body.startsWith("/speed ")) {
+        const newSpeed = parseInt(event.body.slice(7).trim(), 10);
+        if (isNaN(newSpeed) || newSpeed < 5) {
+          api.sendMessage("❌ Speed invalid ya bahut kam hai (min 5s).", threadID);
+          return;
+        }
+        speed = newSpeed;
+        fs.writeFileSync(speedPath, String(speed));
+        api.sendMessage(`⏱️ Speed set to ${speed} seconds.`, threadID);
+        return;
+      }
+
+      if (body.startsWith("/abuse ")) {
+        const mention = event.mentions && Object.keys(event.mentions)[0];
+        if (!mention) {
+          api.sendMessage("❌ Koi user mention karo /abuse ke saath.", threadID);
+          return;
+        }
+        abuseTarget = mention;
+        abuseCooldown.clear();
+        api.sendMessage(`⚠️ Abusing started for user: ${mention}`, threadID);
+        return;
+      }
+
+      if (body.startsWith("/stopabuse")) {
+        abuseTarget = null;
+        api.sendMessage("🛑 Abuse stopped.", threadID);
         return;
       }
     }
 
-    // NICKNAME LOCK
-    if (nickLockEnabled && event.type === "change_thread_name") {
-      return;
-    }
-    if (nickLockEnabled && event.type === "change_nickname") {
-      if (event.author == BOSS_UID) return;
-      if (!originalNicknames[event.author])
-        originalNicknames[event.author] = event.oldNickname || "";
+    // Revert group name if locked and changed
+    if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID) {
       try {
-        await api.changeNickname(
-          originalNicknames[event.author],
-          threadID,
-          event.author
-        );
-        log(`🔒 Nickname revert for ${event.author}`);
+        const info = await api.getThreadInfo(threadID);
+        if (info.name !== LOCKED_GROUP_NAME) {
+          await api.setTitle(LOCKED_GROUP_NAME, threadID);
+          log("🔒 Group name reverted to locked name.");
+        }
       } catch (e) {
-        log("❌ Nicklock revert error: " + e);
+        log("❌ Error reverting group name: " + e.message);
       }
     }
 
-    // ABUSE DETECTION WITH MENTIONED USER ONLY
+    // Nickname lock revert
+    if (nickLockEnabled && (event.type === "change_thread_nickname" || event.type === "change_thread_image")) {
+      try {
+        if (!originalNicknames[senderID]) {
+          originalNicknames[senderID] = event.nickname || "";
+        }
+        if (event.nickname && event.nickname !== originalNicknames[senderID]) {
+          await api.changeNickname(originalNicknames[senderID], threadID, senderID);
+          log(`✅ Nickname reverted for ${senderID}`);
+        }
+      } catch (e) {
+        log("❌ Nickname revert error: " + e.message);
+      }
+    }
+
+    // Auto reply on abusive messages from abuseTarget
     if (
       event.type === "message" &&
-      containsAbuse(body) &&
-      senderID !== BOSS_UID
+      abuseTarget &&
+      senderID === abuseTarget &&
+      containsAbuse(event.body || "")
     ) {
-      // Check if sender is mentioned in last message by admin (BOSS_UID)
-      try {
-        const lastMessages = await api.getThreadHistory(threadID, 5);
-        const mentionedIds = [];
-        lastMessages.forEach(m => {
-          if (m.senderID === BOSS_UID && m.mentions)
-            m.mentions.forEach(u => mentionedIds.push(u.id));
-        });
-
-        if (!mentionedIds.includes(senderID)) return; // ignore if sender not mentioned
-
-      } catch (e) {
-        log("❌ Error checking mentions: " + e);
-        return;
-      }
-
-      if (!autoMessage) {
-        log("⚠️ Auto reply message empty, skipping abuse reply.");
-        return;
-      }
-
-      const key = `${threadID}-${senderID}`;
       const now = Date.now();
+      const lastSent = abuseCooldown.get(senderID) || 0;
 
-      if (abuseCooldown.has(key) && now - abuseCooldown.get(key) < speedSec * 1000) {
-        return;
-      }
-      abuseCooldown.set(key, now);
-
-      try {
-        const mention = [
-          {
-            tag: `@${senderID}`,
-            id: senderID,
-            fromIndex: 0,
-            length: senderID.length + 1,
-          },
-        ];
-
-        await api.sendMessage(
-          {
-            body: `@${senderID} ${autoMessage}`,
-            mentions: mention,
-          },
-          threadID
-        );
-
-        log(`⚠️ Abuse detected from ${senderID}, sent auto reply.`);
-      } catch (e) {
-        log("❌ Abuse auto reply error: " + e);
+      if (now - lastSent > speed * 1000) {
+        api.sendMessage({
+          body: autoMessage,
+          mentions: [{ tag: "", id: senderID }],
+        }, threadID);
+        abuseCooldown.set(senderID, now);
+        log(`⚠️ Sent auto abuse reply to ${senderID}`);
       }
     }
   });
