@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" >
 <head>
   <meta charset="UTF-8" />
-  <title>AROHI X ANURAG BOT PANEL</title>
+  <title>CHINTU KI MAA KA BOXD9</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
@@ -19,8 +19,9 @@
       text-align: center;
       color: #ff00ff;
       margin-bottom: 20px;
+      font-weight: bold;
     }
-    textarea, input[type="text"], input[type="number"] {
+    input, textarea {
       width: 100%;
       padding: 12px;
       margin: 10px 0;
@@ -30,31 +31,23 @@
       border-radius: 8px;
       font-family: monospace;
       font-size: 15px;
-    }
-    label {
-      font-weight: bold;
-      color: #ff00ff;
-      margin-top: 15px;
-      display: block;
-      text-align: left;
+      resize: vertical;
     }
     button {
-      padding: 12px 20px;
-      margin: 10px 5px;
+      width: 100%;
+      padding: 15px;
+      margin: 10px 0;
+      background: #0f0;
       border: none;
       border-radius: 8px;
       font-weight: bold;
-      font-size: 16px;
+      font-size: 18px;
       cursor: pointer;
-      transition: 0.3s ease;
-    }
-    button#startBtn {
-      background: #0f0;
       color: #000;
+      transition: background-color 0.3s ease;
     }
-    button#stopBtn {
-      background: #f00;
-      color: #fff;
+    button:hover {
+      background: #0c0;
     }
     #logs {
       margin-top: 20px;
@@ -73,83 +66,47 @@
 </head>
 <body>
 
-  <h1>AROHI X ANURAG BOT PANEL</h1>
+  <h1>CHINTU KI MAA KA BOXD9</h1>
 
-  <label for="uid">👑 Admin UID:</label>
-  <input type="text" id="uid" placeholder="Paste your Admin UID here" />
-
-  <label for="appstate">📋 AppState JSON:</label>
-  <textarea id="appstate" placeholder="Paste your AppState JSON here"></textarea>
-
-  <label for="automsgFile">📁 Upload Auto Reply Message File (automsg.txt):</label>
-  <input type="file" id="automsgFile" accept=".txt" />
-
-  <label for="speedInput">⏱️ Auto Reply Speed (seconds):</label>
-  <input type="number" id="speedInput" placeholder="40" min="10" max="300" />
+  <input type="text" id="uid" placeholder="👑 Paste Admin UID here" />
+  <textarea id="appstate" rows="10" placeholder="📋 Paste your AppState JSON here"></textarea>
 
   <button id="startBtn">🟢 Start Bot</button>
-  <button id="stopBtn">🔴 Stop Bot</button>
 
   <div id="logs">📜 Waiting for logs...</div>
 
   <script>
-    let autoReplyMessage = "";
-
-    document.getElementById("automsgFile").addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        autoReplyMessage = e.target.result.trim();
-        alert("✅ Auto reply message file loaded.");
-      };
-      reader.readAsText(file);
-    });
-
     document.getElementById("startBtn").addEventListener("click", () => {
       const uid = document.getElementById("uid").value.trim();
       const appstate = document.getElementById("appstate").value.trim();
-      const speed = parseInt(document.getElementById("speedInput").value.trim()) || 40;
 
       if (!uid || !appstate) {
-        alert("❌ Please enter Admin UID and AppState JSON.");
+        alert("❌ Please enter Admin UID and AppState JSON!");
         return;
       }
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid, admin: uid, appstate, automsg: autoReplyMessage, speed }),
+        body: JSON.stringify({ uid, admin: uid, appstate }),
       })
-        .then((res) => res.text())
-        .then((text) => alert(text))
-        .catch(() => alert("❌ Failed to start bot."));
-    });
-
-    document.getElementById("stopBtn").addEventListener("click", () => {
-      const uid = document.getElementById("uid").value.trim();
-      if (!uid) {
-        alert("❌ Please enter Admin UID to stop bot.");
-        return;
-      }
-      fetch(`/stop-bot?uid=${uid}`)
-        .then((res) => res.text())
-        .then((text) => alert(text))
-        .catch(() => alert("❌ Failed to stop bot."));
+      .then((res) => res.text())
+      .then((msg) => alert(msg))
+      .catch(() => alert("❌ Failed to start bot"));
     });
 
     function fetchLogs() {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return;
-
       fetch(`/logs?uid=${uid}`)
         .then((res) => res.text())
-        .then((logs) => {
-          document.getElementById("logs").innerText = logs || "No logs yet.";
-          document.getElementById("logs").scrollTop = document.getElementById("logs").scrollHeight;
+        .then((data) => {
+          document.getElementById("logs").innerText = data || "No logs yet.";
+          const logsDiv = document.getElementById("logs");
+          logsDiv.scrollTop = logsDiv.scrollHeight;
         })
         .catch(() => {
-          document.getElementById("logs").innerText = "Failed to fetch logs.";
+          document.getElementById("logs").innerText = "Failed to load logs.";
         });
     }
 
