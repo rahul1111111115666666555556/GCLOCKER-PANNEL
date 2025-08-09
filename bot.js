@@ -2,39 +2,40 @@ const ws3 = require("ws3-fca");
 const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3);
 const fs = require("fs");
 const path = require("path");
-const HttpsProxyAgent = require("https-proxy-agent");
 
-const uid = process.argv[2]; // UID passed from index.js
+const uid = process.argv[2];
+if (!uid) {
+  console.error("❌ UID argument missing!");
+  process.exit(1);
+}
+
 const userDir = path.join(__dirname, "users", uid);
 const appStatePath = path.join(userDir, "appstate.json");
 const adminPath = path.join(userDir, "admin.txt");
 const logPath = path.join(userDir, "logs.txt");
 
-// Logging function
 function log(msg) {
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
   console.log(line);
   fs.appendFileSync(logPath, line + "\n");
 }
 
-// Load appstate
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
-  if (!raw.trim()) throw new Error("File is empty");
+  if (!raw.trim()) throw new Error("appstate.json empty");
   appState = JSON.parse(raw);
 } catch (err) {
-  log("❌ appstate.json is invalid or empty.");
+  log("❌ appstate.json invalid or empty.");
   process.exit(1);
 }
 
-// Load admin UID
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
-  if (!BOSS_UID) throw new Error("UID missing");
+  if (!BOSS_UID) throw new Error("admin.txt empty");
 } catch (err) {
-  log("❌ admin.txt is invalid or empty.");
+  log("❌ admin.txt invalid or empty.");
   process.exit(1);
 }
 
@@ -43,192 +44,150 @@ let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
 
-const proxyURL = "http://YOUR_INDIA_PROXY_IP:PORT"; // <- India proxy here
-const proxyAgent = new HttpsProxyAgent(proxyURL);
-
 const loginOptions = {
   appState,
   userAgent:
-    "Mozilla/5.0 (Linux; Android 12; Redmi Note 10 Pro Build/SKQ1.210908.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36", // realistic Android India UA
-  agent: proxyAgent, // proxy for India IP
+    "Mozilla/5.0 (Linux; Android 12; Redmi Note 10 Pro Build/SKQ1.210908.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36",
 };
 
 login(loginOptions, async (err, api) => {
   if (err) return log("❌ [LOGIN FAILED]: " + err);
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
+  log("🤖 BOT ONLINE 🔥 — Ready to rock!");
 
-  // Anti-sleep
+  // Anti-sleep: Typing indicator every 5 minutes if group locked
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      log("💤 Bot is active... still alive ✅");
+      log("💤 Bot active and typing indicator sent.");
     }
   }, 300000);
 
-  // Appstate backup every 10 mins
+  // Save appstate every 10 minutes
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
       fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      log("💾 Appstate saved ✅");
+      log("💾 Appstate saved.");
     } catch (e) {
       log("❌ Appstate save failed: " + e);
     }
   }, 600000);
 
-  // Fetch original nicknames of all members in group
-  async function fetchOriginalNicknames(threadID) {
-    try {
-      const info = await api.getThreadInfo(threadID);
-      originalNicknames = {};
-      for (const participant of info.participantIDs) {
-        const userInfo = await api.getUserInfo(participant);
-        originalNicknames[participant] = userInfo[participant]?.nickname || userInfo[participant]?.name || "";
-      }
-      log("📝 Original nicknames fetched for nicklock.");
-    } catch (e) {
-      log("❌ Failed to fetch original nicknames: " + e);
-    }
-  }
-
-  // NickLock revert function
-  async function revertNicknames(threadID) {
-    for (const uid in originalNicknames) {
-      try {
-        await api.changeNickname(originalNicknames[uid], uid, threadID);
-        log(`🔁 Reverted nickname of ${uid} to "${originalNicknames[uid]}"`);
-        // wait small delay to avoid fb block
-        await new Promise((r) => setTimeout(r, 1500));
-      } catch (e) {
-        log(`❌ Failed to revert nickname of ${uid}: ${e}`);
-      }
-    }
-  }
-
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
 
+    if (event.type !== "message") return;
+
     const senderID = event.senderID;
     const threadID = event.threadID;
-    const body = (event.body || "").toLowerCase();
+    const bodyRaw = event.body || "";
+    const body = bodyRaw.toLowerCase();
 
-    if (event.type === "message") {
-      log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
-    }
+    log(`📩 ${senderID}: ${bodyRaw} (Thread: ${threadID})`);
 
-    // /help command
-    if (event.type === "message" && body === "/help") {
-      const helpText = `
-📜 *COMMANDS LIST* 📜
+    if (senderID === BOSS_UID) {
+      // /help command
+      if (body === "/help") {
+        api.sendMessage(
+          `
+📜 COMMANDS LIST:
 
-🔒 /gclock [name] - Lock group name to [name]
-🔓 /gunlock - Unlock group name
-👤 /nicklock on - Enable nickname lock
-👤 /nicklock off - Disable nickname lock
-🆘 /help - Show this message
-      `;
-      if (senderID === BOSS_UID) {
-        api.sendMessage(helpText, threadID);
-      } else {
-        api.sendMessage("⛔ You are not the boss 😤", threadID);
+🔒 /gclock [name]  - Lock group name to [name]
+🔓 /gunlock        - Unlock group name
+👤 /nicklock on    - Enable nickname lock
+👤 /nicklock off   - Disable nickname lock
+          `.trim(),
+          threadID
+        );
+        return;
       }
-      return;
-    }
 
-    // /gclock - Lock group name
-    if (event.type === "message" && body.startsWith("/gclock")) {
-      if (senderID !== BOSS_UID)
-        return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
-
-      try {
+      // /gclock [name]
+      if (body.startsWith("/gclock")) {
         const newName = event.body.slice(7).trim();
-        if (!newName) return api.sendMessage("⚠️ Group name cannot be empty.", threadID);
-
-        await api.setTitle(newName, threadID);
-        LOCKED_GROUP_NAME = newName;
-        GROUP_THREAD_ID = threadID;
-        api.sendMessage(`🔒 Naam lock ho gaya: "${LOCKED_GROUP_NAME}"`, threadID);
-        log(`🔒 Group name locked to "${LOCKED_GROUP_NAME}"`);
-      } catch (e) {
-        api.sendMessage("❌ Failed to lock group name: " + e, threadID);
-        log("❌ Failed to lock group name: " + e);
-      }
-      return;
-    }
-
-    // /gunlock - Unlock group name
-    if (event.type === "message" && body === "/gunlock") {
-      if (senderID !== BOSS_UID)
-        return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
-
-      LOCKED_GROUP_NAME = null;
-      GROUP_THREAD_ID = null;
-      api.sendMessage("🔓 Group name lock hata diya gaya.", threadID);
-      log("🔓 Group name unlocked.");
-      return;
-    }
-
-    // /nicklock on
-    if (event.type === "message" && body === "/nicklock on") {
-      if (senderID !== BOSS_UID)
-        return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
-
-      nickLockEnabled = true;
-      GROUP_THREAD_ID = threadID;
-      await fetchOriginalNicknames(threadID);
-      api.sendMessage("👤 Nickname lock enabled. Koi bhi nickname change nahi kar payega.", threadID);
-      log("👤 Nicklock enabled.");
-      return;
-    }
-
-    // /nicklock off
-    if (event.type === "message" && body === "/nicklock off") {
-      if (senderID !== BOSS_UID)
-        return api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
-
-      nickLockEnabled = false;
-      originalNicknames = {};
-      api.sendMessage("👤 Nickname lock disabled.", threadID);
-      log("👤 Nicklock disabled.");
-      return;
-    }
-
-    // Detect nickname changes and revert if nicklock enabled
-    if (event.type === "change_nickname" && nickLockEnabled && threadID === GROUP_THREAD_ID) {
-      const changedUID = event.logMessageData?.actorFbId;
-      const targetUID = event.logMessageData?.participantId;
-
-      if (!changedUID || !targetUID) return;
-
-      // Only revert if nickname changed by non-boss user
-      if (changedUID !== BOSS_UID) {
-        const oldNick = originalNicknames[targetUID] || "";
-        if (oldNick) {
-          try {
-            await api.changeNickname(oldNick, targetUID, threadID);
-            log(`🔁 Reverted nickname of ${targetUID} to "${oldNick}" due to nicklock.`);
-          } catch (e) {
-            log("❌ Error reverting nickname: " + e);
-          }
+        if (!newName) {
+          api.sendMessage("⚠️ Please provide a name to lock the group.", threadID);
+          return;
         }
-      }
-      return;
-    }
-
-    // Detect group name changes and revert if locked
-    if (event.type === "change_thread_title" && LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID) {
-      if (event.logMessageData?.actorFbId !== BOSS_UID) {
         try {
-          await api.setTitle(LOCKED_GROUP_NAME, threadID);
-          log(`🔁 Reverted group name to "${LOCKED_GROUP_NAME}"`);
+          await api.setTitle(newName, threadID);
+          LOCKED_GROUP_NAME = newName;
+          GROUP_THREAD_ID = threadID;
+          api.sendMessage(`🔒 Group name locked as: "${newName}"`, threadID);
+          log(`🔒 Group locked as "${newName}"`);
         } catch (e) {
-          log("❌ Failed to revert group name: " + e);
+          api.sendMessage("❌ Failed to lock group name.", threadID);
+          log("❌ Group lock error: " + e);
         }
+        return;
       }
-      return;
+
+      // /gunlock
+      if (body === "/gunlock") {
+        try {
+          if (!LOCKED_GROUP_NAME || GROUP_THREAD_ID !== threadID) {
+            api.sendMessage("⚠️ Lock the group first before unlocking.", threadID);
+            return;
+          }
+          const threadInfo = await api.getThreadInfo(threadID);
+          await api.setTitle(threadInfo.name, threadID);
+          LOCKED_GROUP_NAME = null;
+          GROUP_THREAD_ID = null;
+          api.sendMessage("🔓 Group name unlocked.", threadID);
+          log("🔓 Group unlocked");
+        } catch (e) {
+          api.sendMessage("❌ Failed to unlock group name.", threadID);
+          log("❌ Group unlock error: " + e);
+        }
+        return;
+      }
+
+      // /nicklock on
+      if (body === "/nicklock on") {
+        nickLockEnabled = true;
+        originalNicknames = {};
+        api.sendMessage("✅ Nickname lock enabled.", threadID);
+        log("✅ Nicklock enabled");
+        return;
+      }
+
+      // /nicklock off
+      if (body === "/nicklock off") {
+        nickLockEnabled = false;
+        originalNicknames = {};
+        api.sendMessage("❌ Nickname lock disabled.", threadID);
+        log("❌ Nicklock disabled");
+        return;
+      }
+    }
+
+    // Enforce nickname lock only if enabled & group locked & in locked group
+    if (
+      nickLockEnabled &&
+      GROUP_THREAD_ID === threadID &&
+      event.isGroup &&
+      event.type === "message"
+    ) {
+      try {
+        if (!originalNicknames[senderID]) {
+          // Save original nickname once
+          const info = await api.getUserInfo(senderID);
+          originalNicknames[senderID] = info[senderID].name;
+          log(`📌 Saved original nickname of ${senderID}: ${originalNicknames[senderID]}`);
+        }
+        const infoNow = await api.getUserInfo(senderID);
+        const currentNick = infoNow[senderID].name;
+
+        if (currentNick !== originalNicknames[senderID]) {
+          await api.changeNickname(originalNicknames[senderID], senderID, threadID);
+          log(`⚠️ Reset nickname of ${senderID} to "${originalNicknames[senderID]}"`);
+        }
+      } catch (e) {
+        log("❌ Nicklock error: " + e);
+      }
     }
   });
 });
