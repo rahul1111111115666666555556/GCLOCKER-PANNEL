@@ -24,7 +24,7 @@
       margin: auto;
       box-shadow: 0 0 15px #f0f;
     }
-    textarea, input {
+    input, textarea {
       width: 100%;
       padding: 10px;
       margin: 10px 0;
@@ -33,7 +33,6 @@
       border: none;
       border-radius: 8px;
       font-family: monospace;
-      font-size: 14px;
     }
     button {
       padding: 12px 20px;
@@ -44,14 +43,8 @@
       cursor: pointer;
       font-size: 15px;
     }
-    .start-btn {
-      background: #0f0;
-      color: #000;
-    }
-    .stop-btn {
-      background: #f00;
-      color: #fff;
-    }
+    .start-btn { background: #0f0; color: #000; }
+    .stop-btn { background: #f00; color: #fff; }
     .log-box {
       background: #111;
       border: 1px solid #444;
@@ -67,26 +60,25 @@
       box-shadow: inset 0 0 8px #f0f;
     }
     label {
-      display: block;
-      margin: 10px 0 5px;
       font-weight: bold;
       color: #f0f;
+      display: block;
+      margin: 10px 0 5px;
       text-align: left;
     }
   </style>
 </head>
 <body>
   <h1>🚀 AROHI X ANURAG BOT PANEL</h1>
-
   <div class="panel">
     <input id="uid" placeholder="👑 Paste your Admin UID..." />
-    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..." rows="8"></textarea>
+    <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..."></textarea>
 
-    <label for="automsgFile">📁 Upload Auto Reply Message File (.txt)</label>
+    <label for="automsgFile">📁 Upload Auto Abuse Message File (.txt)</label>
     <input type="file" id="automsgFile" accept=".txt" />
 
-    <label for="speed">⏱️ Message Speed (seconds, min 5, default 40)</label>
-    <input type="number" id="speed" min="5" max="300" value="40" />
+    <label for="speed">⏱️ Auto Abuse Speed (Seconds)</label>
+    <input type="number" id="speed" min="10" max="600" value="40" />
 
     <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
     <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
@@ -95,14 +87,14 @@
   </div>
 
   <script>
-    let autoReplyMessage = "";
+    let autoReplyText = "";
 
     document.getElementById("automsgFile").addEventListener("change", function(e) {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        autoReplyMessage = e.target.result;
+        autoReplyText = e.target.result;
       };
       reader.readAsText(file);
     });
@@ -110,16 +102,9 @@
     function startBot() {
       const appstate = document.getElementById("appstate").value.trim();
       const admin = document.getElementById("uid").value.trim();
-      const speed = document.getElementById("speed").value.trim();
+      const speed = parseInt(document.getElementById("speed").value) || 40;
 
-      if (!appstate || !admin) {
-        alert("❌ Enter AppState and Admin UID!");
-        return;
-      }
-      if (speed && (isNaN(speed) || speed < 5)) {
-        alert("❌ Speed must be a number >= 5");
-        return;
-      }
+      if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
 
       fetch("/start-bot", {
         method: "POST",
@@ -127,36 +112,25 @@
         body: JSON.stringify({
           appstate,
           admin,
-          automsg: autoReplyMessage,
-          speed,
-        }),
-      })
-        .then((res) => res.text())
-        .then((text) => alert(text))
-        .catch((err) => alert("❌ Error: " + err));
+          automsg: autoReplyText,
+          speed
+        })
+      }).then(res => res.text()).then(alert);
     }
 
     function stopBot() {
       const uid = document.getElementById("uid").value.trim();
-      if (!uid) {
-        alert("❌ Enter Admin UID to stop bot.");
-        return;
-      }
-      fetch(`/stop-bot?uid=${uid}`)
-        .then((res) => res.text())
-        .then((text) => alert(text))
-        .catch((err) => alert("❌ Error: " + err));
+      if (!uid) return alert("❌ Enter UID to stop bot.");
+
+      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(alert);
     }
 
     setInterval(() => {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return;
-      fetch(`/logs?uid=${uid}`)
-        .then((res) => res.text())
-        .then((logs) => {
-          document.getElementById("logs").innerText = logs;
-        })
-        .catch(() => {});
+      fetch(`/logs?uid=${uid}`).then(res => res.text()).then(log => {
+        document.getElementById("logs").innerText = log;
+      });
     }, 3000);
   </script>
 </body>
