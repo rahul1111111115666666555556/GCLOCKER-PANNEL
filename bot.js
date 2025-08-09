@@ -9,6 +9,7 @@ const appStatePath = path.join(userDir, "appstate.json");
 const adminPath = path.join(userDir, "admin.txt");
 const logPath = path.join(userDir, "logs.txt");
 const autoMsgPath = path.join(userDir, "automsg.txt");
+const speedPath = path.join(userDir, "speed.txt");
 
 function log(msg) {
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -44,6 +45,15 @@ try {
   autoMessage = "";
 }
 
+let speedSec = 40; // default 40 sec
+try {
+  const speedRaw = fs.readFileSync(speedPath, "utf-8").trim();
+  speedSec = parseInt(speedRaw, 10);
+  if (isNaN(speedSec) || speedSec < 5) speedSec = 40;
+} catch {
+  log("⚠️ speed.txt not found or invalid, using default 40s.");
+}
+
 if (process.argv[3]) {
   try {
     fs.writeFileSync(autoMsgPath, process.argv[3], "utf-8");
@@ -51,6 +61,19 @@ if (process.argv[3]) {
     log("💾 Auto reply message updated from start argument.");
   } catch (e) {
     log("❌ Failed to update auto reply message: " + e);
+  }
+}
+
+if (process.argv[4]) {
+  try {
+    let spd = parseInt(process.argv[4], 10);
+    if (!isNaN(spd) && spd >= 5) {
+      fs.writeFileSync(speedPath, String(spd), "utf-8");
+      speedSec = spd;
+      log("⏱️ Speed updated from start argument: " + spd + " seconds.");
+    }
+  } catch (e) {
+    log("❌ Failed to update speed: " + e);
   }
 }
 
@@ -85,7 +108,7 @@ function containsAbuse(text) {
 }
 
 const abuseCooldown = new Map();
-const COOLDOWN_MS = 40 * 1000; // 40 seconds
+const COOLDOWN_MS = () => speedSec * 1000;
 
 login(loginOptions, async (err, api) => {
   if (err) return log("❌ [LOGIN FAILED]: " + err);
@@ -113,6 +136,18 @@ login(loginOptions, async (err, api) => {
     }
   }, 600000);
 
+  // Auto message interval
+  setInterval(async () => {
+    if (GROUP_THREAD_ID && autoMessage) {
+      try {
+        await api.sendMessage(autoMessage, GROUP_THREAD_ID);
+        log("⏱️ Auto reply message sent.");
+      } catch (e) {
+        log("❌ Auto reply send error: " + e);
+      }
+    }
+  }, speedSec * 1000);
+
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
 
@@ -128,7 +163,7 @@ login(loginOptions, async (err, api) => {
     // Ignore own messages except commands
     if (senderID === api.getCurrentUserID() && !body.startsWith("/")) return;
 
-    // COMMANDS - all start with '/'
+    // COMMANDS
     if (body.startsWith("/")) {
       const args = body.trim().split(" ");
       const cmd = args[0];
@@ -140,7 +175,7 @@ login(loginOptions, async (err, api) => {
 /gunlock        - Unlock group name
 /nicklock on    - Enable nickname lock
 /nicklock off   - Disable nickname lock
-/abuse          - Test abuse detection with auto reply
+/abuse          - Test abuse detection auto reply
 /help           - Show this help`;
         await api.sendMessage(helpMsg, threadID);
         return;
@@ -235,14 +270,12 @@ login(loginOptions, async (err, api) => {
 
     // NICKNAME LOCK
     if (nickLockEnabled && event.type === "change_thread_name") {
-      // do nothing, ignore group rename
       return;
     }
     if (nickLockEnabled && event.type === "change_nickname") {
-      if (event.author == BOSS_UID) return; // Admin can change
+      if (event.author == BOSS_UID) return;
       if (!originalNicknames[event.author])
         originalNicknames[event.author] = event.oldNickname || "";
-      // Revert nickname change
       try {
         await api.changeNickname(
           originalNicknames[event.author],
@@ -255,12 +288,28 @@ login(loginOptions, async (err, api) => {
       }
     }
 
-    // ABUSE DETECTION - auto reply with mention
+    // ABUSE DETECTION WITH MENTIONED USER ONLY
     if (
       event.type === "message" &&
       containsAbuse(body) &&
       senderID !== BOSS_UID
     ) {
+      // Check if sender is mentioned in last message by admin (BOSS_UID)
+      try {
+        const lastMessages = await api.getThreadHistory(threadID, 5);
+        const mentionedIds = [];
+        lastMessages.forEach(m => {
+          if (m.senderID === BOSS_UID && m.mentions)
+            m.mentions.forEach(u => mentionedIds.push(u.id));
+        });
+
+        if (!mentionedIds.includes(senderID)) return; // ignore if sender not mentioned
+
+      } catch (e) {
+        log("❌ Error checking mentions: " + e);
+        return;
+      }
+
       if (!autoMessage) {
         log("⚠️ Auto reply message empty, skipping abuse reply.");
         return;
@@ -269,36 +318,30 @@ login(loginOptions, async (err, api) => {
       const key = `${threadID}-${senderID}`;
       const now = Date.now();
 
-      if (abuseCooldown.has(key) && now - abuseCooldown.get(key) < COOLDOWN_MS) {
+      if (abuseCooldown.has(key) && now - abuseCooldown.get(key) < speedSec * 1000) {
         return;
       }
       abuseCooldown.set(key, now);
 
       try {
-        const threadInfo = await api.getThreadInfo(threadID);
-        if (
-          threadInfo.participantIDs.includes(BOSS_UID) ||
-          threadID === BOSS_UID
-        ) {
-          const mention = [
-            {
-              tag: `@${senderID}`,
-              id: senderID,
-              fromIndex: 0,
-              length: senderID.length + 1,
-            },
-          ];
+        const mention = [
+          {
+            tag: `@${senderID}`,
+            id: senderID,
+            fromIndex: 0,
+            length: senderID.length + 1,
+          },
+        ];
 
-          await api.sendMessage(
-            {
-              body: `@${senderID} ${autoMessage}`,
-              mentions: mention,
-            },
-            threadID
-          );
+        await api.sendMessage(
+          {
+            body: `@${senderID} ${autoMessage}`,
+            mentions: mention,
+          },
+          threadID
+        );
 
-          log(`⚠️ Abuse detected from ${senderID}, sent auto reply.`);
-        }
+        log(`⚠️ Abuse detected from ${senderID}, sent auto reply.`);
       } catch (e) {
         log("❌ Abuse auto reply error: " + e);
       }
