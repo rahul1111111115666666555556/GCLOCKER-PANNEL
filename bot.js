@@ -2,6 +2,12 @@ const ws3 = require("ws3-fca");
 const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3);
 const fs = require("fs");
 const path = require("path");
+const HttpsProxyAgent = require("https-proxy-agent");
+
+// Indian proxy (example working proxy for India, replace with your own if needed)
+const INDIAN_PROXY = "http://103.119.112.54:80";  // Replace with any valid Indian proxy URL
+
+const proxyAgent = new HttpsProxyAgent(INDIAN_PROXY);
 
 const uid = process.argv[2];
 const userDir = path.join(__dirname, "users", uid);
@@ -45,6 +51,7 @@ const loginOptions = {
   appState,
   userAgent:
     "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FBAV/400.0.0.0.0",
+  agent: proxyAgent,
 };
 
 login(loginOptions, (err, api) => {
@@ -54,6 +61,22 @@ login(loginOptions, (err, api) => {
     listenEvents: true,
     selfListen: true,
     updatePresence: true,
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FBAV/400.0.0.0.0",
+    headers: {
+      "Accept": "application/json, text/javascript, */*; q=0.01",
+      "Accept-Language": "en-IN,en-US;q=0.9,en;q=0.8",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "Origin": "https://www.facebook.com",
+      "Referer": "https://www.facebook.com/",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "X-FB-LSD": "AVpWNRQy_OU",
+      "X-FB-Friendly-Name": "MessengerGraphQLThreadlistQuery",
+      "X-FB-Revision-ID": "4000123",
+    },
+    agent: proxyAgent,
   });
 
   log("🤖 BOT ONLINE — Ready to rock");
