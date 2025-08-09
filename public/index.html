@@ -12,12 +12,10 @@
       text-align: center;
       padding: 20px;
     }
-
     h1 {
       color: #f0f;
       text-shadow: 0 0 10px #f0f;
     }
-
     .panel {
       background: #111;
       padding: 25px;
@@ -26,7 +24,6 @@
       margin: auto;
       box-shadow: 0 0 15px #f0f;
     }
-
     textarea, input {
       width: 100%;
       padding: 10px;
@@ -37,7 +34,6 @@
       border-radius: 8px;
       font-family: monospace;
     }
-
     button {
       padding: 12px 20px;
       margin: 10px 5px;
@@ -47,17 +43,14 @@
       cursor: pointer;
       font-size: 15px;
     }
-
     .start-btn {
       background: #0f0;
       color: #000;
     }
-
     .stop-btn {
       background: #f00;
       color: #fff;
     }
-
     .log-box {
       background: #111;
       border: 1px solid #444;
@@ -72,28 +65,25 @@
       border-radius: 8px;
       box-shadow: inset 0 0 8px #f0f;
     }
-
     label {
       display: block;
       margin: 10px 0 5px;
       font-weight: bold;
       color: #f0f;
-      text-align: left;
     }
   </style>
 </head>
 <body>
   <h1>🚀 AROHI X ANURAG BOT PANEL</h1>
-
   <div class="panel">
     <input id="uid" placeholder="👑 Paste your Admin UID..." />
     <textarea id="appstate" placeholder="📋 Paste your AppState JSON here..."></textarea>
 
-    <label for="automsgFile">📁 Upload Auto Reply Message File (.txt)</label>
+    <label for="automsgFile">📁 Upload Auto Reply Message File</label>
     <input type="file" id="automsgFile" accept=".txt" />
 
-    <label for="speedInput">⏱️ Auto Reply Speed (seconds)</label>
-    <input type="number" id="speedInput" min="5" max="300" value="40" />
+    <label for="speedInput">⏱️ Auto Reply Speed (seconds, min 5)</label>
+    <input type="number" id="speedInput" min="5" value="40" />
 
     <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
     <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
@@ -102,7 +92,6 @@
   </div>
 
   <script>
-    // Store uploaded file content
     let autoReplyMessage = "";
 
     document.getElementById("automsgFile").addEventListener("change", function(e) {
@@ -110,7 +99,7 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        autoReplyMessage = e.target.result;
+        autoReplyMessage = e.target.result.trim();
       };
       reader.readAsText(file);
     });
@@ -120,17 +109,15 @@
       const admin = document.getElementById("uid").value.trim();
       const speed = document.getElementById("speedInput").value.trim();
 
-      if (!appstate || !admin || !autoReplyMessage) {
-        return alert("❌ Enter AppState, Admin UID, and upload Auto Reply Message file!");
-      }
+      if (!appstate || !admin) return alert("❌ Enter AppState and UID!");
+      if (!autoReplyMessage) return alert("❌ Upload Auto Reply Message file!");
+      if (isNaN(speed) || speed < 5) return alert("❌ Speed must be at least 5 seconds.");
 
       fetch("/start-bot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appstate, admin, automsg: autoReplyMessage, speed })
-      })
-      .then(res => res.text())
-      .then(alert);
+        body: JSON.stringify({ appstate, admin, automsg: autoReplyMessage, speed }),
+      }).then(res => res.text()).then(alert);
     }
 
     function stopBot() {
