@@ -14,15 +14,12 @@ const PORT = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, "public");
 const usersDir = path.join(__dirname, "users");
 
-if (!fs.existsSync(usersDir)) {
-  fs.mkdirSync(usersDir, { recursive: true });
-}
+if (!fs.existsSync(usersDir)) fs.mkdirSync(usersDir, { recursive: true });
 
-// Serve static files (html)
 app.use(express.static(publicDir));
 app.use(express.json({ limit: "10mb" }));
 
-// Multer setup for automsg.txt upload via multipart/form-data
+// Multer setup for auto reply message file upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uid = req.body.uid;
@@ -37,103 +34,113 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage }).single("automsgFile");
 
-// Keep track of running bot processes by UID
+// Map to keep track of running bots by UID
 const bots = new Map();
 
-// Upload automsg file (optional - if you want separate upload endpoint)
-app.post("/upload-automsg-file", (req, res) => {
+// Start bot endpoint
+app.post("/start-bot", (req, res) => {
   upload(req, res, (err) => {
-    if (err) return res.status(400).send("❌ Upload error: " + err.message);
-    res.send("✅ automsg.txt uploaded successfully");
+    if (err) return res.status(400).send("File upload error: " + err.message);
+
+    const { appstate, admin, speed, uid, automsg } = req.body;
+
+    if (!uid || !appstate || !admin) {
+      return res.status(400).send("UID, AppState and Admin UID are required");
+    }
+
+    const userDir = path.join(usersDir, uid);
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+
+    // Save appstate.json
+    try {
+      fs.writeFileSync(path.join(userDir, "appstate.json"), appstate, "utf-8");
+    } catch (e) {
+      return res.status(500).send("Failed to save appstate.json");
+    }
+
+    // Save admin.txt
+    try {
+      fs.writeFileSync(path.join(userDir, "admin.txt"), admin, "utf-8");
+    } catch (e) {
+      return res.status(500).send("Failed to save admin.txt");
+    }
+
+    // Save speed.txt
+    try {
+      fs.writeFileSync(path.join(userDir, "speed.txt"), String(speed || 40), "utf-8");
+    } catch (e) {
+      return res.status(500).send("Failed to save speed.txt");
+    }
+
+    // Save automsg.txt if file not uploaded (some clients may send in body)
+    if (automsg && automsg.trim()) {
+      try {
+        fs.writeFileSync(path.join(userDir, "automsg.txt"), automsg, "utf-8");
+      } catch (e) {
+        return res.status(500).send("Failed to save automsg.txt");
+      }
+    }
+
+    // If bot already running for this UID, kill it first
+    if (bots.has(uid)) {
+      bots.get(uid).kill();
+      bots.delete(uid);
+    }
+
+    // Spawn bot.js child process with UID as arg
+    const botProcess = spawn("node", ["bot.js", uid], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    bots.set(uid, botProcess);
+
+    botProcess.stdout.on("data", (data) => {
+      fs.appendFileSync(path.join(userDir, "logs.txt"), data.toString());
+      console.log(`[BOT ${uid}] ${data}`);
+    });
+
+    botProcess.stderr.on("data", (data) => {
+      fs.appendFileSync(path.join(userDir, "logs.txt"), data.toString());
+      console.error(`[BOT ${uid} ERR] ${data}`);
+    });
+
+    botProcess.on("exit", (code) => {
+      bots.delete(uid);
+      console.log(`[BOT ${uid}] exited with code ${code}`);
+    });
+
+    return res.send("Bot started for UID: " + uid);
   });
 });
 
-// Start bot endpoint - expects JSON body { appstate, admin, automsg, uid? }
-app.post("/start-bot", async (req, res) => {
-  const { appstate, admin, automsg = "", uid } = req.body;
-  if (!appstate || !admin) return res.status(400).send("❌ appstate and admin UID required");
-
-  const userUID = uid || admin;
-  const userDir = path.join(usersDir, userUID);
-  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
-
-  try {
-    // Save appstate.json, admin.txt, automsg.txt
-    fs.writeFileSync(path.join(userDir, "appstate.json"), appstate, "utf-8");
-    fs.writeFileSync(path.join(userDir, "admin.txt"), admin, "utf-8");
-    fs.writeFileSync(path.join(userDir, "automsg.txt"), automsg, "utf-8");
-  } catch (e) {
-    return res.status(500).send("❌ Failed to save files: " + e.message);
-  }
-
-  // If bot already running, kill it
-  if (bots.has(userUID)) {
-    const oldProc = bots.get(userUID);
-    oldProc.kill("SIGKILL");
-    bots.delete(userUID);
-  }
-
-  // Spawn bot.js with UID argument
-  const botProcess = spawn("node", ["bot.js", userUID], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  bots.set(userUID, botProcess);
-
-  const logPath = path.join(userDir, "logs.txt");
-  const logStream = fs.createWriteStream(logPath, { flags: "a" });
-
-  botProcess.stdout.on("data", (data) => {
-    const log = data.toString();
-    logStream.write(log);
-    console.log(`[BOT ${userUID} STDOUT] ${log.trim()}`);
-  });
-
-  botProcess.stderr.on("data", (data) => {
-    const log = data.toString();
-    logStream.write(log);
-    console.error(`[BOT ${userUID} STDERR] ${log.trim()}`);
-  });
-
-  botProcess.on("close", (code) => {
-    bots.delete(userUID);
-    logStream.write(`[${new Date().toLocaleTimeString()}] Bot exited with code ${code}\n`);
-    console.log(`[BOT ${userUID}] exited with code ${code}`);
-  });
-
-  res.send(`🟢 Bot started for UID: ${userUID}`);
-});
-
-// Stop bot
+// Stop bot endpoint
 app.get("/stop-bot", (req, res) => {
   const uid = req.query.uid;
-  if (!uid) return res.status(400).send("❌ UID required");
-  if (!bots.has(uid)) return res.status(400).send("❌ No running bot for UID");
+  if (!uid) return res.status(400).send("UID query parameter missing");
 
-  const proc = bots.get(uid);
-  proc.kill("SIGKILL");
-  bots.delete(uid);
-
-  res.send(`🔴 Bot stopped for UID: ${uid}`);
+  if (bots.has(uid)) {
+    bots.get(uid).kill();
+    bots.delete(uid);
+    return res.send("Bot stopped for UID: " + uid);
+  } else {
+    return res.send("No bot running for UID: " + uid);
+  }
 });
 
-// Serve logs
+// Logs endpoint
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
-  if (!uid) return res.status(400).send("❌ UID required");
+  if (!uid) return res.status(400).send("UID query parameter missing");
 
-  const logPath = path.join(usersDir, uid, "logs.txt");
-  if (!fs.existsSync(logPath)) return res.send("No logs found.");
+  const logFile = path.join(usersDir, uid, "logs.txt");
+  if (!fs.existsSync(logFile)) return res.send("No logs found.");
 
-  const logs = fs.readFileSync(logPath, "utf-8");
-  res.send(logs);
-});
-
-// 404 fallback
-app.use((req, res) => {
-  res.status(404).send("404 Not Found");
+  fs.readFile(logFile, "utf-8", (err, data) => {
+    if (err) return res.status(500).send("Error reading logs");
+    res.send(data);
+  });
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });
