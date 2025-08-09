@@ -2,19 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ANURAG X AROHI PANEL</title>
+  <title>CHINTU KI MAA KA BOXD4 PANEL</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
     body {
       margin: 0;
       padding: 0;
-      font-family: 'Segoe UI', sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       color: #fff;
       text-align: center;
       overflow: hidden;
-      background: #000;
+      background: linear-gradient(135deg, #0b0000, #2a0000, #4d0000);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      user-select: none;
+      background-attachment: fixed;
+      background-size: 400% 400%;
+      animation: bgGradient 20s ease infinite;
+    }
+
+    @keyframes bgGradient {
+      0% {background-position:0% 50%}
+      50% {background-position:100% 50%}
+      100% {background-position:0% 50%}
     }
 
     video#bg-video {
@@ -24,159 +44,305 @@
       min-height: 100vh;
       object-fit: cover;
       z-index: -1;
+      filter: brightness(0.35) saturate(1.2) contrast(1.1);
+      transition: filter 0.6s ease;
+      pointer-events: none;
+    }
+
+    video#bg-video:hover {
+      filter: brightness(0.55) saturate(1.4) contrast(1.2);
     }
 
     .clock {
       position: fixed;
-      top: 15px;
-      right: 25px;
-      font-size: 18px;
+      top: 20px;
+      right: 30px;
+      font-size: 22px;
       color: #00ffff;
-      font-weight: bold;
-      text-shadow: 0 0 10px #000;
+      font-weight: 900;
+      text-shadow:
+        0 0 8px #00ffff,
+        0 0 18px #00ffff,
+        0 0 26px #00ffff;
+      font-family: 'Courier New', Courier, monospace;
+      letter-spacing: 3px;
+      user-select: none;
+      z-index: 9999;
+      background: rgba(0, 255, 255, 0.1);
+      padding: 5px 14px;
+      border-radius: 10px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
 
     .container {
       margin-top: 8vh;
-      background: rgba(0,0,0,0.3);
-      padding: 30px;
-      border-radius: 20px;
-      max-width: 650px;
-      margin-inline: auto;
-      box-shadow: 0 0 25px #ff00ff99;
+      background: rgba(40, 0, 0, 0.85);
+      padding: 40px 45px;
+      border-radius: 30px;
+      max-width: 680px;
+      width: 100%;
+      box-shadow:
+        0 0 55px #ff0055cc,
+        inset 0 0 35px #ff004488;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1.5px solid #ff33aacc;
+      transition: box-shadow 0.3s ease;
+    }
+    .container:hover {
+      box-shadow:
+        0 0 65px #ff00aacc,
+        inset 0 0 45px #ff00aacc;
     }
 
     .heading {
-      font-size: 34px;
-      font-weight: bold;
-      background: linear-gradient(90deg, #ff00cc, #00ffff, #ff00cc);
-      background-size: 200% auto;
+      font-size: 44px;
+      font-weight: 900;
+      background: linear-gradient(270deg, #ff0099, #ff33cc, #ff0099);
+      background-size: 400% 400%;
       color: #fff;
-      text-shadow: 0 0 15px #00ffe1;
-      border-radius: 10px;
-      padding: 10px 15px;
-      animation: glowText 5s ease-in-out infinite;
+      text-shadow:
+        0 0 28px #ff33cc,
+        0 0 42px #ff0099;
+      border-radius: 20px;
+      padding: 22px 30px;
+      margin-bottom: 42px;
+      animation: neonGlow 5s ease-in-out infinite;
+      font-family: 'Segoe UI Black', 'Arial Black', Arial, sans-serif;
+      user-select: none;
+      letter-spacing: 7px;
+      text-transform: uppercase;
+      text-align: center;
+      letter-spacing: 6px;
+      user-select: none;
     }
 
-    @keyframes glowText {
-      0% { background-position: 0% center; }
-      50% { background-position: 100% center; }
-      100% { background-position: 0% center; }
+    @keyframes neonGlow {
+      0%, 100% {
+        background-position: 0% 50%;
+        text-shadow:
+          0 0 12px #ff0077,
+          0 0 26px #ff33aa,
+          0 0 36px #ff66cc,
+          0 0 48px #ff66cc,
+          0 0 60px #ff33cc;
+      }
+      50% {
+        background-position: 100% 50%;
+        text-shadow:
+          0 0 22px #ff3399,
+          0 0 42px #ff66cc,
+          0 0 60px #ff99cc,
+          0 0 75px #ff66cc,
+          0 0 90px #ff33cc;
+      }
     }
 
     input, textarea {
       width: 100%;
-      padding: 12px;
-      margin: 10px 0;
-      background: rgba(0, 0, 0, 0.5);
-      color: #00ff99;
-      border: none;
-      border-radius: 10px;
-      font-family: monospace;
-      font-size: 14px;
+      padding: 18px 22px;
+      margin: 14px 0;
+      background: rgba(70, 0, 0, 0.7);
+      color: #ffaadf;
+      border: 2.5px solid #ff3388;
+      border-radius: 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 17px;
+      resize: vertical;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
+      outline-offset: 3px;
+      outline-color: transparent;
+      box-shadow: inset 0 0 15px #ff3388cc;
+      user-select: text;
+      caret-color: #ff33cc;
+      letter-spacing: 1.2px;
+      line-height: 1.4;
+    }
+
+    input::placeholder, textarea::placeholder {
+      color: #ff99bbcc;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #ff33bb;
+      box-shadow: 0 0 18px #ff33bbdd, inset 0 0 15px #ff33bbcc;
+      outline-color: #ff33bb;
+      background: rgba(90, 0, 0, 0.95);
+      color: #ffd6f5ff;
     }
 
     button {
       position: relative;
       overflow: hidden;
-      padding: 12px 25px;
-      margin: 10px 5px;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: bold;
+      padding: 16px 34px;
+      margin: 14px 10px 0 10px;
+      border-radius: 24px;
+      font-size: 20px;
+      font-weight: 900;
       cursor: pointer;
       border: none;
-      transition: 0.3s ease;
+      box-shadow:
+        0 0 28px #ff33bbcc,
+        inset 0 0 20px #ff33bbcc;
+      transition: transform 0.3s ease, box-shadow 0.35s ease;
+      user-select: none;
+      letter-spacing: 2.5px;
+      font-family: 'Segoe UI Semibold', Tahoma, Geneva, Verdana, sans-serif;
+      text-transform: uppercase;
+      text-shadow: 0 0 6px #ff77cc;
+      background-clip: padding-box;
+      will-change: transform;
     }
 
     .start-btn {
-      background: linear-gradient(to right, #00ff99, #00ffff);
-      color: #000;
+      background: linear-gradient(90deg, #ff33cc, #ff0077);
+      color: #fff;
+      filter: drop-shadow(0 0 14px #ff33ccdd);
+    }
+
+    .start-btn:hover {
+      box-shadow:
+        0 0 65px #ff33ddff,
+        inset 0 0 50px #ff00aaff;
+      transform: scale(1.15);
     }
 
     .stop-btn {
-      background: linear-gradient(to right, #ff0066, #ff33cc);
+      background: linear-gradient(90deg, #770000, #cc0044);
       color: #fff;
+      filter: drop-shadow(0 0 14px #cc0044dd);
     }
 
-    button:hover {
-      transform: scale(1.08);
-      box-shadow: 0 0 25px #fff5;
+    .stop-btn:hover {
+      box-shadow:
+        0 0 65px #cc0055ff,
+        inset 0 0 50px #cc0077ff;
+      transform: scale(1.15);
     }
 
     button:active::after {
       content: "";
       position: absolute;
-      width: 300%;
-      height: 300%;
+      width: 320%;
+      height: 320%;
       top: 50%;
       left: 50%;
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.3);
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      animation: ripple 0.6s ease-out;
+      animation: ripple 0.7s ease-out;
       pointer-events: none;
     }
 
     @keyframes ripple {
-      from { opacity: 1; transform: translate(-50%, -50%) scale(0); }
-      to { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+      from {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(0);
+      }
+      to {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1);
+      }
     }
 
     .log-box {
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid #444;
-      margin-top: 20px;
-      padding: 15px;
-      height: 250px;
+      background: rgba(70, 0, 20, 0.85);
+      border: 1.8px solid #ff33bb;
+      margin-top: 24px;
+      padding: 22px;
+      height: 280px;
       overflow-y: auto;
       text-align: left;
       white-space: pre-wrap;
-      font-size: 13px;
-      color: #f0f0f0;
-      border-radius: 10px;
-      box-shadow: inset 0 0 10px #ff00ff;
+      font-size: 15px;
+      color: #ffaadf;
+      border-radius: 24px;
+      box-shadow:
+        inset 0 0 30px #ff33bbdd,
+        0 0 22px #ff77ccbb;
+      font-family: 'Courier New', Courier, monospace;
+      line-height: 1.4;
+      user-select: text;
+      letter-spacing: 0.3px;
     }
 
     .commands {
-      margin-top: 20px;
-      font-size: 13px;
-      background: rgba(0,0,0,0.4);
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid #888;
-      color: #ffccff;
+      margin-top: 28px;
+      font-size: 15px;
+      background: rgba(60, 0, 30, 0.8);
+      padding: 18px 22px;
+      border-radius: 20px;
+      border: 1.5px solid #cc33bbcc;
+      color: #ffccffdd;
       text-align: left;
-      box-shadow: inset 0 0 10px #fff5;
+      box-shadow: inset 0 0 26px #ff77ccdd;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      user-select: none;
+      letter-spacing: 0.8px;
+    }
+
+    .commands b {
+      color: #ff66cc;
+      font-weight: 900;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
     }
 
     .contact {
-      margin-top: 10px;
-      font-size: 14px;
+      margin-top: 16px;
+      font-size: 16px;
+      color: #ff99bbcc;
+      user-select: none;
     }
 
     .contact a {
-      color: #00ffee;
+      color: #ff66cc;
       text-decoration: none;
-      margin: 0 10px;
-      font-weight: bold;
+      margin: 0 14px;
+      font-weight: 900;
+      transition: color 0.3s ease;
+      text-shadow: 0 0 8px #ff99bb88;
     }
 
     .contact a:hover {
+      color: #ff33cc;
       text-decoration: underline;
+      text-shadow: 0 0 18px #ff33ccdd;
     }
 
     .status {
-      margin-top: 15px;
-      font-weight: bold;
-      font-size: 16px;
-      color: #00ff00;
-      animation: glow 2s infinite ease-in-out;
+      margin-top: 22px;
+      font-weight: 900;
+      font-size: 20px;
+      color: #ff66cc;
+      animation: pulseGlow 2.8s infinite ease-in-out;
+      user-select: none;
+      letter-spacing: 2px;
+      font-family: 'Segoe UI Black', Arial Black, Arial, sans-serif;
+      text-shadow:
+        0 0 12px #ff33cc,
+        0 0 28px #ff66cc,
+        0 0 38px #ff33ccbb;
+      transition: color 0.4s ease;
     }
 
-    @keyframes glow {
-      0%, 100% { text-shadow: 0 0 5px #0f0, 0 0 10px #0f0; }
-      50% { text-shadow: 0 0 15px #0f0, 0 0 25px #00ff00; }
+    @keyframes pulseGlow {
+      0%, 100% {
+        text-shadow:
+          0 0 15px #ff33cc,
+          0 0 35px #ff66cc,
+          0 0 55px #ff33cc;
+      }
+      50% {
+        text-shadow:
+          0 0 25px #ff66cc,
+          0 0 45px #ff99cc,
+          0 0 70px #ff66cc;
+      }
     }
   </style>
 </head>
@@ -189,7 +355,7 @@
   <div class="clock" id="clock">🕒 --:--:--</div>
 
   <div class="container">
-    <div class="heading"> ANURAG X AROHI </div>
+    <div class="heading">CHINTU KI MAA KA BOXD4</div>
 
     <input id="uid" placeholder="👑 Enter Admin UID..." />
     <textarea id="appstate" placeholder="📋 Paste AppState JSON..."></textarea>
@@ -209,8 +375,8 @@
 
     <div class="contact">
       📬 Contact:
-      <a href="https://www.facebook.com/profile.php?id=61578840237242" target="_blank">Facebook</a> |
-      <a href="https://wa.me/6394812128" target="_blank">WhatsApp</a>
+      <a href="https://www.facebook.com/profile.php?id=61578840237242" target="_blank" rel="noopener noreferrer">Facebook</a> |
+      <a href="https://wa.me/6394812128" target="_blank" rel="noopener noreferrer">WhatsApp</a>
     </div>
   </div>
 
@@ -226,26 +392,33 @@
         body: JSON.stringify({ appstate, admin })
       }).then(res => res.text()).then(alert);
 
-      document.getElementById("bot-status").innerText = "Bot Status: ONLINE";
-      document.getElementById("bot-status").style.color = "#00ff00";
+      const status = document.getElementById("bot-status");
+      status.innerText = "Bot Status: ONLINE";
+      status.style.color = "#ff66cc";
+      status.style.textShadow = "0 0 8px #ff33cc, 0 0 20px #ff66cc";
     }
 
     function stopBot() {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return alert("❌ Enter UID to stop bot.");
 
-      fetch(`/stop-bot?uid=${uid}`).then(res => res.text()).then(alert);
+      fetch(`/stop-bot?uid=${encodeURIComponent(uid)}`).then(res => res.text()).then(alert);
 
-      document.getElementById("bot-status").innerText = "Bot Status: OFFLINE";
-      document.getElementById("bot-status").style.color = "#ff4444";
-      document.getElementById("bot-status").style.textShadow = "none";
+      const status = document.getElementById("bot-status");
+      status.innerText = "Bot Status: OFFLINE";
+      status.style.color = "#660000";
+      status.style.textShadow = "none";
     }
 
     setInterval(() => {
       const uid = document.getElementById("uid").value.trim();
       if (!uid) return;
-      fetch(`/logs?uid=${uid}`).then(res => res.text()).then(log => {
-        document.getElementById("logs").innerText = log;
+      fetch(`/logs?uid=${encodeURIComponent(uid)}`).then(res => res.text()).then(log => {
+        const logsEl = document.getElementById("logs");
+        if (log !== logsEl.textContent) {
+          logsEl.textContent = log;
+          logsEl.scrollTop = logsEl.scrollHeight;
+        }
       });
     }, 3000);
 
