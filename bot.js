@@ -56,7 +56,10 @@ if (!BOSS_UID) {
   log("❌ admin.txt is empty, exiting.");
   process.exit(1);
 }
-const autoMessage = loadTextFile(autoMsgPath, "automsg.txt");
+let autoMessage = loadTextFile(autoMsgPath, "automsg.txt");
+if (!autoMessage) {
+  log("⚠️ automsg.txt empty. Auto abuse messages will be blank!");
+}
 
 let speed = 40;
 try {
@@ -72,7 +75,6 @@ let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
 
-// Initialize abuseTarget as null to avoid undefined errors
 let abuseTarget = null;
 
 const abusiveWords = [
@@ -131,13 +133,20 @@ login(loginOptions, async (err, api) => {
       const bodyRaw = event.body || "";
       const body = bodyRaw.toLowerCase();
 
+      // Log every message
       if (event.type === "message") {
         log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
       }
 
-      // Auto abuse logic
+      // Auto abuse logic on abusive words if abuseTarget is set
       if (containsAbuse(bodyRaw)) {
         if (senderID === BOSS_UID) return; // Boss ko abuse nahi karna
+
+        if (abuseTarget === null) {
+          abuseTarget = senderID; // Jo pehla abusive message bheje, use target banao
+          log(`⚠️ Abuse mode ON for user ${senderID} (auto set)`);
+        }
+
         if (abuseTarget === senderID) {
           const now = Date.now();
           const lastTime = abuseCooldown.get(senderID) || 0;
@@ -148,7 +157,7 @@ login(loginOptions, async (err, api) => {
         }
       }
 
-      // Commands - only boss can run
+      // Commands
       if (event.type === "message" && body.startsWith("/")) {
         if (senderID !== BOSS_UID) {
           api.sendMessage("⛔ Sirf boss hi commands chala sakta hai!", threadID);
@@ -162,11 +171,11 @@ login(loginOptions, async (err, api) => {
 /gunlock - Unlock group name
 /nicklock on - Enable nickname lock
 /nicklock off - Disable nickname lock
-/abuse @uid - Start auto abuse reply for tagged user
-/stopabuse - Stop auto abuse replies
-/automsg command disabled - use panel upload file
-/speed command disabled - use panel input
+/abuse - Start auto abuse mode (auto target first abuser)
+/stopabuse - Stop auto abuse mode
 /help - Show this message
+
+Note: Auto reply message aur speed panel se set karo.
           `;
           api.sendMessage(helpMsg, threadID);
           return;
@@ -246,25 +255,17 @@ login(loginOptions, async (err, api) => {
           return;
         }
 
-        if (body.startsWith("/abuse ")) {
-          if (!event.mentions || Object.keys(event.mentions).length === 0) {
-            api.sendMessage("❌ Please mention a user to abuse!", threadID);
-            return;
-          }
-          // Take the first mentioned user
-          const mention = Object.values(event.mentions)[0];
-          abuseTarget = mention.id;
-          api.sendMessage(`⚠️ Auto abuse started for @${mention.id}`, threadID, {
-            mentions: [{ id: mention.id, tag: "@" + mention.id }],
-          });
-          log(`⚠️ Auto abuse started for ${mention.id}`);
+        if (body.startsWith("/abuse")) {
+          abuseTarget = null; // Reset abuseTarget to start fresh
+          api.sendMessage("⚠️ Auto abuse mode enabled. Pehla abusive user target banega.", threadID);
+          log("⚠️ Abuse mode enabled by boss");
           return;
         }
 
         if (body.startsWith("/stopabuse")) {
           abuseTarget = null;
-          api.sendMessage("🛑 Auto abuse stopped.", threadID);
-          log("🛑 Auto abuse stopped");
+          api.sendMessage("🛑 Auto abuse mode disabled.", threadID);
+          log("🛑 Abuse mode disabled by boss");
           return;
         }
       }
