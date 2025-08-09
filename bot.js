@@ -112,17 +112,6 @@ login(loginOptions, async (err, api) => {
     }
   }, 600000);
 
-  // Auto reply abusive messages timer (interval controlled by speed)
-  setInterval(() => {
-    if (GROUP_THREAD_ID && abuseTarget && autoMessage) {
-      api.sendMessage({
-        body: autoMessage,
-        mentions: [{ tag: "", id: abuseTarget }],
-      }, GROUP_THREAD_ID);
-      log(`⚠️ Sent auto abuse reply to ${abuseTarget}`);
-    }
-  }, speed * 1000);
-
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
 
@@ -149,8 +138,8 @@ login(loginOptions, async (err, api) => {
 /nicklock off - Disable nickname lock
 /abuse @uid - Start auto abuse reply to tagged user
 /stopabuse - Stop auto abuse replies
-/automsg [text] - Update auto reply message
-/speed [seconds] - Update auto reply speed (min 5)
+/automsg [text] - Update auto reply message (not needed, use file upload)
+/speed command removed, use panel input instead
 `;
         api.sendMessage(helpMsg, threadID);
         return;
@@ -166,123 +155,4 @@ login(loginOptions, async (err, api) => {
           await api.setTitle(newName, threadID);
           LOCKED_GROUP_NAME = newName;
           GROUP_THREAD_ID = threadID;
-          api.sendMessage(`🔒 Group name locked as: "${LOCKED_GROUP_NAME}"`, threadID);
-          return;
-        } catch (e) {
-          api.sendMessage("❌ Group name lock failed: " + e.message, threadID);
-          return;
-        }
-      }
-
-      if (body.startsWith("/gunlock")) {
-        LOCKED_GROUP_NAME = null;
-        api.sendMessage("🔓 Group name unlock kar diya gaya.", threadID);
-        return;
-      }
-
-      if (body.startsWith("/nicklock on")) {
-        nickLockEnabled = true;
-        originalNicknames = {};
-        api.sendMessage("✅ Nickname lock enabled.", threadID);
-        return;
-      }
-
-      if (body.startsWith("/nicklock off")) {
-        nickLockEnabled = false;
-        originalNicknames = {};
-        api.sendMessage("❌ Nickname lock disabled.", threadID);
-        return;
-      }
-
-      if (body.startsWith("/automsg ")) {
-        const newMsg = event.body.slice(9).trim();
-        if (!newMsg) {
-          api.sendMessage("❌ Auto message empty hai.", threadID);
-          return;
-        }
-        autoMessage = newMsg;
-        fs.writeFileSync(autoMsgPath, newMsg);
-        api.sendMessage("💾 Auto reply message updated.", threadID);
-        return;
-      }
-
-      if (body.startsWith("/speed ")) {
-        const newSpeed = parseInt(event.body.slice(7).trim(), 10);
-        if (isNaN(newSpeed) || newSpeed < 5) {
-          api.sendMessage("❌ Speed invalid ya bahut kam hai (min 5s).", threadID);
-          return;
-        }
-        speed = newSpeed;
-        fs.writeFileSync(speedPath, String(speed));
-        api.sendMessage(`⏱️ Speed set to ${speed} seconds.`, threadID);
-        return;
-      }
-
-      if (body.startsWith("/abuse ")) {
-        const mention = event.mentions && Object.keys(event.mentions)[0];
-        if (!mention) {
-          api.sendMessage("❌ Koi user mention karo /abuse ke saath.", threadID);
-          return;
-        }
-        abuseTarget = mention;
-        abuseCooldown.clear();
-        api.sendMessage(`⚠️ Abusing started for user: ${mention}`, threadID);
-        return;
-      }
-
-      if (body.startsWith("/stopabuse")) {
-        abuseTarget = null;
-        api.sendMessage("🛑 Abuse stopped.", threadID);
-        return;
-      }
-    }
-
-    // Revert group name if locked and changed
-    if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID) {
-      try {
-        const info = await api.getThreadInfo(threadID);
-        if (info.name !== LOCKED_GROUP_NAME) {
-          await api.setTitle(LOCKED_GROUP_NAME, threadID);
-          log("🔒 Group name reverted to locked name.");
-        }
-      } catch (e) {
-        log("❌ Error reverting group name: " + e.message);
-      }
-    }
-
-    // Nickname lock revert
-    if (nickLockEnabled && (event.type === "change_thread_nickname" || event.type === "change_thread_image")) {
-      try {
-        if (!originalNicknames[senderID]) {
-          originalNicknames[senderID] = event.nickname || "";
-        }
-        if (event.nickname && event.nickname !== originalNicknames[senderID]) {
-          await api.changeNickname(originalNicknames[senderID], threadID, senderID);
-          log(`✅ Nickname reverted for ${senderID}`);
-        }
-      } catch (e) {
-        log("❌ Nickname revert error: " + e.message);
-      }
-    }
-
-    // Auto reply on abusive messages from abuseTarget
-    if (
-      event.type === "message" &&
-      abuseTarget &&
-      senderID === abuseTarget &&
-      containsAbuse(event.body || "")
-    ) {
-      const now = Date.now();
-      const lastSent = abuseCooldown.get(senderID) || 0;
-
-      if (now - lastSent > speed * 1000) {
-        api.sendMessage({
-          body: autoMessage,
-          mentions: [{ tag: "", id: senderID }],
-        }, threadID);
-        abuseCooldown.set(senderID, now);
-        log(`⚠️ Sent auto abuse reply to ${senderID}`);
-      }
-    }
-  });
-});
+          api.sendMessage(`🔒 Group name locked as: "${LOCKED_GROUP_NAME
