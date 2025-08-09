@@ -26,7 +26,6 @@ function log(msg) {
   }
 }
 
-// Load and validate files safely
 function loadJsonFile(filePath, description) {
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
@@ -72,6 +71,8 @@ let GROUP_THREAD_ID = null;
 let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
+
+// Initialize abuseTarget as null to avoid undefined errors
 let abuseTarget = null;
 
 const abusiveWords = [
@@ -134,9 +135,9 @@ login(loginOptions, async (err, api) => {
         log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
       }
 
-      // Abuse detection + reply
+      // Auto abuse logic
       if (containsAbuse(bodyRaw)) {
-        if (senderID === BOSS_UID) return; // Boss ko abuse nahi
+        if (senderID === BOSS_UID) return; // Boss ko abuse nahi karna
         if (abuseTarget === senderID) {
           const now = Date.now();
           const lastTime = abuseCooldown.get(senderID) || 0;
@@ -147,7 +148,7 @@ login(loginOptions, async (err, api) => {
         }
       }
 
-      // Commands only from BOSS_UID
+      // Commands - only boss can run
       if (event.type === "message" && body.startsWith("/")) {
         if (senderID !== BOSS_UID) {
           api.sendMessage("⛔ Sirf boss hi commands chala sakta hai!", threadID);
@@ -165,6 +166,7 @@ login(loginOptions, async (err, api) => {
 /stopabuse - Stop auto abuse replies
 /automsg command disabled - use panel upload file
 /speed command disabled - use panel input
+/help - Show this message
           `;
           api.sendMessage(helpMsg, threadID);
           return;
@@ -245,11 +247,12 @@ login(loginOptions, async (err, api) => {
         }
 
         if (body.startsWith("/abuse ")) {
-          const mention = event.mentions && Object.values(event.mentions)[0];
-          if (!mention) {
+          if (!event.mentions || Object.keys(event.mentions).length === 0) {
             api.sendMessage("❌ Please mention a user to abuse!", threadID);
             return;
           }
+          // Take the first mentioned user
+          const mention = Object.values(event.mentions)[0];
           abuseTarget = mention.id;
           api.sendMessage(`⚠️ Auto abuse started for @${mention.id}`, threadID, {
             mentions: [{ id: mention.id, tag: "@" + mention.id }],
@@ -269,7 +272,7 @@ login(loginOptions, async (err, api) => {
       // Nickname lock enforcement
       if (nickLockEnabled && event.type === "change_nickname") {
         const { author, nick } = event;
-        if (!originalNicknames[author]) return; // no original saved
+        if (!originalNicknames[author]) return;
         if (nick !== originalNicknames[author]) {
           try {
             await api.changeNickname(originalNicknames[author], author, threadID);
