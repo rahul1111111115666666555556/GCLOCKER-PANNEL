@@ -93,6 +93,7 @@ login(loginOptions, async (err, api) => {
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
   log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
+  // Anti-sleep typing indicator
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
@@ -101,6 +102,7 @@ login(loginOptions, async (err, api) => {
     }
   }, 300000);
 
+  // Save appstate every 10 minutes
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
@@ -114,112 +116,151 @@ login(loginOptions, async (err, api) => {
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
 
-    if (event.type !== "message") return;
-
     const senderID = event.senderID;
     const threadID = event.threadID;
     const bodyRaw = event.body || "";
     const body = bodyRaw.toLowerCase();
 
-    log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
+    if (event.type === "message") {
+      log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
+    }
 
-    if (senderID === BOSS_UID) {
-      if (body === "/help") {
-        api.sendMessage(
-          `
-📜 *COMMANDS LIST* 📜
+    // Ignore own messages except commands
+    if (senderID === api.getCurrentUserID() && !body.startsWith("/")) return;
 
-🔒 /gclock [name] - Lock group name to [name]
-🔓 /gunlock - Unlock group name
-👤 /nicklock on - Enable nickname lock
-👤 /nicklock off - Disable nickname lock
+    // COMMANDS - all start with '/'
+    if (body.startsWith("/")) {
+      const args = body.trim().split(" ");
+      const cmd = args[0];
 
-🆘 /help - Show this message
-          `.trim(),
-          threadID
-        );
+      if (cmd === "/help") {
+        let helpMsg = 
+`🤖 BOT Commands:
+/gclock <name>  - Lock group name
+/gunlock        - Unlock group name
+/nicklock on    - Enable nickname lock
+/nicklock off   - Disable nickname lock
+/abuse          - Test abuse detection with auto reply
+/help           - Show this help`;
+        await api.sendMessage(helpMsg, threadID);
         return;
       }
 
-      if (body.startsWith("/gclock")) {
-        const newName = event.body.slice(7).trim();
+      if (senderID !== BOSS_UID) {
+        await api.sendMessage("⛔ Tu boss nahi hai 😤", threadID);
+        return;
+      }
+
+      if (cmd === "/gclock") {
+        const newName = args.slice(1).join(" ").trim();
         if (!newName) {
-          api.sendMessage("⚠️ Naam dena padega lock karne ke liye!", threadID);
+          await api.sendMessage("❌ Group name nahi diya.", threadID);
           return;
         }
         try {
           await api.setTitle(newName, threadID);
           LOCKED_GROUP_NAME = newName;
           GROUP_THREAD_ID = threadID;
-          api.sendMessage(`🔒 Group name locked as: "${newName}"`, threadID);
-          log(`🔒 Group name locked to "${newName}"`);
+          await api.sendMessage(`🔒 Naam lock ho gaya: "${newName}"`, threadID);
+          log(`🔒 Group name locked: ${newName}`);
         } catch (e) {
-          api.sendMessage("❌ Group name lock failed.", threadID);
-          log("❌ Group name lock error: " + e);
+          await api.sendMessage("❌ Naam lock karte waqt error aaya.", threadID);
+          log("❌ /gclock error: " + e);
         }
         return;
       }
 
-      if (body === "/gunlock") {
+      if (cmd === "/gunlock") {
+        if (!LOCKED_GROUP_NAME || threadID !== GROUP_THREAD_ID) {
+          await api.sendMessage("❌ Group name pehle lock nahi hai ya ye group nahi hai.", threadID);
+          return;
+        }
         try {
-          if (!LOCKED_GROUP_NAME || GROUP_THREAD_ID !== threadID) {
-            api.sendMessage("⚠️ Pehle group lock karo phir unlock karo!", threadID);
-            return;
-          }
-          const threadInfo = await api.getThreadInfo(threadID);
-          await api.setTitle(threadInfo.name, threadID);
+          const info = await api.getThreadInfo(threadID);
+          await api.setTitle(info.name, threadID);
           LOCKED_GROUP_NAME = null;
           GROUP_THREAD_ID = null;
-          api.sendMessage("🔓 Group name unlocked.", threadID);
-          log("🔓 Group unlocked");
+          await api.sendMessage("🔓 Naam lock hata diya gaya.", threadID);
+          log("🔓 Group name unlock hua.");
         } catch (e) {
-          api.sendMessage("❌ Group unlock failed.", threadID);
-          log("❌ Group unlock error: " + e);
+          await api.sendMessage("❌ Naam unlock karte waqt error aaya.", threadID);
+          log("❌ /gunlock error: " + e);
         }
         return;
       }
 
-      if (body === "/nicklock on") {
-        nickLockEnabled = true;
-        originalNicknames = {};
-        api.sendMessage("✅ Nickname lock enabled.", threadID);
-        log("✅ Nicklock enabled");
+      if (cmd === "/nicklock") {
+        const param = args[1];
+        if (param === "on") {
+          nickLockEnabled = true;
+          originalNicknames = {};
+          await api.sendMessage("🔒 Nickname lock on kar diya.", threadID);
+          log("🔒 Nickname lock enabled.");
+        } else if (param === "off") {
+          nickLockEnabled = false;
+          originalNicknames = {};
+          await api.sendMessage("🔓 Nickname lock off kar diya.", threadID);
+          log("🔓 Nickname lock disabled.");
+        } else {
+          await api.sendMessage("❌ Usage: /nicklock on | off", threadID);
+        }
         return;
       }
 
-      if (body === "/nicklock off") {
-        nickLockEnabled = false;
-        originalNicknames = {};
-        api.sendMessage("❌ Nickname lock disabled.", threadID);
-        log("❌ Nicklock disabled");
+      if (cmd === "/abuse") {
+        // Just test abuse reply
+        if (!autoMessage) {
+          await api.sendMessage("⚠️ Auto reply message empty.", threadID);
+          return;
+        }
+        const mention = [
+          {
+            tag: `@${senderID}`,
+            id: senderID,
+            fromIndex: 0,
+            length: senderID.length + 1,
+          },
+        ];
+        await api.sendMessage(
+          {
+            body: `@${senderID} ${autoMessage}`,
+            mentions: mention,
+          },
+          threadID
+        );
+        log(`⚠️ /abuse command by ${senderID}, sent auto reply.`);
         return;
       }
     }
 
-    if (
-      nickLockEnabled &&
-      GROUP_THREAD_ID === threadID &&
-      event.isGroup &&
-      event.type === "message"
-    ) {
+    // NICKNAME LOCK
+    if (nickLockEnabled && event.type === "change_thread_name") {
+      // do nothing, ignore group rename
+      return;
+    }
+    if (nickLockEnabled && event.type === "change_nickname") {
+      if (event.author == BOSS_UID) return; // Admin can change
+      if (!originalNicknames[event.author])
+        originalNicknames[event.author] = event.oldNickname || "";
+      // Revert nickname change
       try {
-        if (!originalNicknames[senderID]) {
-          const nick = (await api.getUserInfo(senderID))[senderID].name;
-          originalNicknames[senderID] = nick;
-        }
-
-        const currentNick = (await api.getUserInfo(senderID))[senderID].name;
-
-        if (currentNick !== originalNicknames[senderID]) {
-          await api.changeNickname(originalNicknames[senderID], senderID, threadID);
-          log(`⚠️ Reset nickname of ${senderID} to ${originalNicknames[senderID]}`);
-        }
+        await api.changeNickname(
+          originalNicknames[event.author],
+          threadID,
+          event.author
+        );
+        log(`🔒 Nickname revert for ${event.author}`);
       } catch (e) {
-        log("❌ Nicklock error: " + e);
+        log("❌ Nicklock revert error: " + e);
       }
     }
 
-    if (containsAbuse(body) && senderID !== BOSS_UID) {
+    // ABUSE DETECTION - auto reply with mention
+    if (
+      event.type === "message" &&
+      containsAbuse(body) &&
+      senderID !== BOSS_UID
+    ) {
       if (!autoMessage) {
         log("⚠️ Auto reply message empty, skipping abuse reply.");
         return;
