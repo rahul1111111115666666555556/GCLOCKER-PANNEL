@@ -2,9 +2,8 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
-const multer = require("multer");
-const helmet = require("helmet");
 const { spawn } = require("child_process");
+const helmet = require("helmet");
 
 const app = express();
 app.use(helmet());
@@ -13,35 +12,25 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 const USERS_DIR = path.join(__dirname, "users");
 
-// Multer setup for file upload (single file, field name: "automsgFile")
-const upload = multer({ storage: multer.memoryStorage() });
-
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true }));
-
-// Serve public folder (your HTML is here)
 app.use(express.static(path.join(__dirname, "public")));
 
-let botProcesses = {}; // uid -> child process
+let botProcesses = {};
 
-// Helper: Ensure user directory exists
 function ensureUserDir(uid) {
   const userDir = path.join(USERS_DIR, uid);
   if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
   return userDir;
 }
 
-// Save file content to user folder
 function saveUserFile(uid, filename, content) {
   const filePath = path.join(USERS_DIR, uid, filename);
   fs.writeFileSync(filePath, content, "utf-8");
   return filePath;
 }
 
-// Routes
-
-// Start bot
-app.post("/start-bot", upload.single("automsgFile"), (req, res) => {
+app.post("/start-bot", (req, res) => {
   const { appstate, admin, automsg, speed } = req.body;
 
   if (!appstate || !admin) return res.status(400).send("AppState and Admin UID required.");
@@ -50,16 +39,9 @@ app.post("/start-bot", upload.single("automsgFile"), (req, res) => {
   const userDir = ensureUserDir(uid);
 
   try {
-    // Save appstate.json
     saveUserFile(uid, "appstate.json", appstate);
-
-    // Save admin.txt
     saveUserFile(uid, "admin.txt", uid);
-
-    // Save automsg.txt (auto reply message)
     if (automsg) saveUserFile(uid, "automsg.txt", automsg);
-
-    // Save speed.txt (optional)
     if (speed) {
       const spdNum = parseInt(speed, 10);
       if (!isNaN(spdNum) && spdNum >= 5) {
@@ -67,23 +49,25 @@ app.post("/start-bot", upload.single("automsgFile"), (req, res) => {
       }
     }
 
-    // Kill old bot if running
     if (botProcesses[uid]) {
       botProcesses[uid].kill();
       delete botProcesses[uid];
     }
 
-    // Spawn new bot process
     const botProcess = spawn("node", ["bot.js", uid], { stdio: ["ignore", "pipe", "pipe"] });
-
     botProcesses[uid] = botProcess;
 
     botProcess.stdout.on("data", (data) => {
       console.log(`[BOT ${uid}] ${data.toString().trim()}`);
+      // Append logs to user logs.txt
+      const logPath = path.join(USERS_DIR, uid, "logs.txt");
+      fs.appendFileSync(logPath, `[${new Date().toLocaleTimeString()}] ${data.toString()}\n`);
     });
 
     botProcess.stderr.on("data", (data) => {
       console.error(`[BOT ${uid} ERROR] ${data.toString().trim()}`);
+      const logPath = path.join(USERS_DIR, uid, "logs.txt");
+      fs.appendFileSync(logPath, `[${new Date().toLocaleTimeString()}] ERROR: ${data.toString()}\n`);
     });
 
     botProcess.on("exit", (code) => {
@@ -98,7 +82,6 @@ app.post("/start-bot", upload.single("automsgFile"), (req, res) => {
   }
 });
 
-// Stop bot
 app.get("/stop-bot", (req, res) => {
   const uid = req.query.uid;
   if (!uid) return res.status(400).send("UID required to stop bot.");
@@ -112,7 +95,6 @@ app.get("/stop-bot", (req, res) => {
   }
 });
 
-// Get logs
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
   if (!uid) return res.status(400).send("UID required to get logs.");
