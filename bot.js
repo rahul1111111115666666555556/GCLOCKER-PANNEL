@@ -5,16 +5,16 @@ const path = require("path");
 
 const uid = process.argv[2];
 if (!uid) {
-  console.error("❌ UID argument missing. Usage: node bot.js <UID>");
+  console.error("❌ UID argument missing");
   process.exit(1);
 }
 
 const userDir = path.join(__dirname, "users", uid);
 const appStatePath = path.join(userDir, "appstate.json");
 const adminPath = path.join(userDir, "admin.txt");
+const logPath = path.join(userDir, "logs.txt");
 const autoMsgPath = path.join(userDir, "automsg.txt");
 const speedPath = path.join(userDir, "speed.txt");
-const logPath = path.join(userDir, "logs.txt");
 
 function log(msg) {
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -22,48 +22,41 @@ function log(msg) {
   fs.appendFileSync(logPath, line + "\n");
 }
 
-let appState;
+let appState, BOSS_UID, autoMessage = "", speed = 40;
+
 try {
-  const raw = fs.readFileSync(appStatePath, "utf-8");
-  if (!raw.trim()) throw new Error("File is empty");
-  appState = JSON.parse(raw);
-} catch (err) {
-  log("❌ appstate.json invalid or missing.");
+  appState = JSON.parse(fs.readFileSync(appStatePath, "utf-8"));
+} catch {
+  log("❌ appstate.json invalid or missing");
   process.exit(1);
 }
 
-let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
-  if (!BOSS_UID) throw new Error("UID missing");
-} catch (err) {
-  log("❌ admin.txt invalid or missing.");
+  if (!BOSS_UID) throw new Error("admin.txt empty");
+} catch {
+  log("❌ admin.txt invalid or missing");
   process.exit(1);
 }
 
-let autoMessage = "";
 try {
   autoMessage = fs.readFileSync(autoMsgPath, "utf-8").trim();
-  if (!autoMessage) log("⚠️ automsg.txt is empty.");
 } catch {
-  log("⚠️ automsg.txt not found.");
+  log("⚠️ automsg.txt missing or empty");
   autoMessage = "";
 }
 
-let speedSeconds = 40;
 try {
-  const sp = fs.readFileSync(speedPath, "utf-8").trim();
-  speedSeconds = parseInt(sp) || 40;
+  speed = parseInt(fs.readFileSync(speedPath, "utf-8").trim());
+  if (isNaN(speed) || speed < 10) speed = 40;
 } catch {
-  log("⚠️ speed.txt not found. Using default 40 seconds.");
+  speed = 40;
 }
 
 let GROUP_THREAD_ID = null;
 let LOCKED_GROUP_NAME = null;
 let nickLockEnabled = false;
 let originalNicknames = {};
-let abuseActive = false;
-let abuseTargetUID = null;
 
 const loginOptions = {
   appState,
@@ -72,8 +65,17 @@ const loginOptions = {
 };
 
 const abusiveWords = [
-  "bc", "mc", "bcchod", "chutiya", "chod", "lund", "gandu",
-  "madarchod", "behanchod", "bhadwa", "haramkhor",
+  "bc",
+  "mc",
+  "bcchod",
+  "chutiya",
+  "chod",
+  "lund",
+  "gandu",
+  "madarchod",
+  "behanchod",
+  "bhadwa",
+  "haramkhor",
 ];
 
 function containsAbuse(text) {
@@ -82,117 +84,42 @@ function containsAbuse(text) {
 }
 
 const abuseCooldown = new Map();
-function canAbuse(uid) {
-  const last = abuseCooldown.get(uid) || 0;
-  return Date.now() - last > speedSeconds * 1000;
-}
-
-const commands = {
-  help: async (api, threadID) => {
-    const msg = `📜 Commands List:
-    /gclock [name] - Lock group name
-    /gunlock - Unlock group name (revert)
-    /nicklock on - Enable nickname lock
-    /nicklock off - Disable nickname lock
-    /abuse start [mentionUID] - Start auto abuse to that user
-    /abuse stop - Stop auto abuse
-    /help - Show this message`;
-    await api.sendMessage(msg, threadID);
-  },
-
-  gclock: async (api, threadID, args) => {
-    if (!args.length) return api.sendMessage("⚠️ Usage: /gclock [new group name]", threadID);
-    const newName = args.join(" ");
-    try {
-      await api.setTitle(newName, threadID);
-      LOCKED_GROUP_NAME = newName;
-      GROUP_THREAD_ID = threadID;
-      await api.sendMessage(`🔒 Group name locked as "${newName}"`, threadID);
-      log(`Group name locked as: ${newName}`);
-    } catch {
-      await api.sendMessage("❌ Failed to lock group name.", threadID);
-    }
-  },
-
-  gunlock: async (api, threadID) => {
-    if (!GROUP_THREAD_ID) return api.sendMessage("⚠️ Group name not locked.", threadID);
-    try {
-      await api.setTitle(LOCKED_GROUP_NAME, GROUP_THREAD_ID);
-      await api.sendMessage(`🔓 Group name unlocked (reverted to "${LOCKED_GROUP_NAME}")`, threadID);
-      GROUP_THREAD_ID = null;
-      LOCKED_GROUP_NAME = null;
-      log("Group name unlocked.");
-    } catch {
-      await api.sendMessage("❌ Failed to unlock group name.", threadID);
-    }
-  },
-
-  nicklock: async (api, threadID, args) => {
-    if (!args.length) return api.sendMessage("⚠️ Usage: /nicklock on|off", threadID);
-    const param = args[0].toLowerCase();
-    if (param === "on") {
-      nickLockEnabled = true;
-      originalNicknames = {};
-      await api.sendMessage("🔒 Nickname lock enabled", threadID);
-      log("Nickname lock enabled.");
-    } else if (param === "off") {
-      nickLockEnabled = false;
-      originalNicknames = {};
-      await api.sendMessage("🔓 Nickname lock disabled", threadID);
-      log("Nickname lock disabled.");
-    } else {
-      await api.sendMessage("⚠️ Usage: /nicklock on|off", threadID);
-    }
-  },
-
-  abuse: async (api, threadID, args) => {
-    if (!args.length) return api.sendMessage("⚠️ Usage: /abuse start [mentionUID]|stop", threadID);
-
-    const action = args[0].toLowerCase();
-
-    if (action === "start") {
-      if (args.length < 2) return api.sendMessage("⚠️ Usage: /abuse start [mentionUID]", threadID);
-      abuseActive = true;
-      GROUP_THREAD_ID = threadID;
-      abuseTargetUID = args[1];
-      await api.sendMessage(`🚩 Auto abuse started for UID: ${abuseTargetUID}`, threadID);
-      log(`Auto abuse started for UID: ${abuseTargetUID}`);
-    } else if (action === "stop") {
-      abuseActive = false;
-      abuseTargetUID = null;
-      await api.sendMessage("🛑 Auto abuse stopped", threadID);
-      log("Auto abuse stopped.");
-    } else {
-      await api.sendMessage("⚠️ Usage: /abuse start [mentionUID]|stop", threadID);
-    }
-  },
-};
 
 login(loginOptions, (err, api) => {
-  if (err) return log("❌ [LOGIN FAILED]: " + err);
+  if (err) return log("❌ LOGIN FAILED: " + err);
 
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
-  log("🤖 BOT ONLINE 🔥 Ready to lock, nicklock & abuse!");
+  log("🤖 BOT ONLINE — Ready to serve!");
 
   // Anti-sleep (typing indicator)
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
       setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      log("💤 Bot active (typing indicator).");
+      log("💤 Bot alive signal sent");
     }
   }, 300000);
 
-  // Save appstate every 10 minutes
+  // Appstate auto-save
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
       fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      log("💾 AppState saved.");
+      log("💾 Appstate saved");
     } catch (e) {
-      log("❌ Failed saving appstate: " + e);
+      log("❌ Appstate save failed: " + e);
     }
   }, 600000);
+
+  // Auto abuse message interval (if autoMessage set)
+  if (autoMessage) {
+    setInterval(() => {
+      if (GROUP_THREAD_ID) {
+        api.sendMessage(autoMessage, GROUP_THREAD_ID);
+        log("💬 Auto reply sent");
+      }
+    }, speed * 1000);
+  }
 
   api.listenMqtt(async (err, event) => {
     if (err) return log("❌ Listen error: " + err);
@@ -201,68 +128,86 @@ login(loginOptions, (err, api) => {
     const threadID = event.threadID;
     const body = (event.body || "").toLowerCase();
 
-    // Group name lock revert on title change by others
-    if (event.type === "change_thread_title" && GROUP_THREAD_ID && LOCKED_GROUP_NAME && event.threadID === GROUP_THREAD_ID) {
-      if (event.author !== BOSS_UID) {
-        try {
-          await api.setTitle(LOCKED_GROUP_NAME, GROUP_THREAD_ID);
-          log("🔒 Group name reverted to locked name.");
-        } catch (e) {
-          log("❌ Failed to revert group name: " + e);
-        }
-      }
-    }
-
-    // Nickname lock revert on nick change by others
-    if (event.type === "change_thread_nickname" && nickLockEnabled && threadID) {
-      if (event.author !== BOSS_UID) {
-        try {
-          if (!originalNicknames[event.author]) {
-            // Save original nickname once
-            originalNicknames[event.author] = event.nickname;
-          } else {
-            await api.changeNickname(originalNicknames[event.author], threadID, event.author);
-            log(`🔒 Reverted nickname for ${event.author}`);
-          }
-        } catch (e) {
-          log("❌ Failed to revert nickname: " + e);
-        }
-      }
-    }
-
     if (event.type === "message") {
-      log(`📩 ${senderID}: ${event.body || ""} (Group: ${threadID})`);
+      log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
+    }
 
-      // Auto abuse on abuse words + cooldown + abuse active + matching group + sender not boss + target UID check
-      if (
-        abuseActive &&
-        senderID !== BOSS_UID &&
-        threadID === GROUP_THREAD_ID &&
-        abuseTargetUID &&
-        containsAbuse(body) &&
-        canAbuse(senderID)
-      ) {
-        abuseCooldown.set(senderID, Date.now());
-        await api.sendMessage(autoMessage || "Abe teri ma ki chut!", threadID);
-        log(`⚠️ Auto abuse sent to ${senderID}`);
-        return;
+    // Ignore if sender not boss and command received
+    if (senderID !== BOSS_UID) return;
+
+    // /help command
+    if (body === "/help") {
+      const helpText = `
+Commands:
+- /gclock <new group name> : Lock group name
+- /gclock remove : Unlock group name (restore original)
+- /nicklock on : Enable nickname lock
+- /nicklock off : Disable nickname lock
+- /abuse : Start auto abuse messages
+- /stopabuse : Stop auto abuse messages
+      `.trim();
+      api.sendMessage(helpText, threadID);
+      return;
+    }
+
+    // /gclock command
+    if (body.startsWith("/gclock")) {
+      GROUP_THREAD_ID = threadID;
+
+      if (body.includes("remove")) {
+        // unlock group
+        try {
+          const info = await api.getThreadInfo(threadID);
+          await api.setTitle(info.threadName, threadID);
+          LOCKED_GROUP_NAME = null;
+          api.sendMessage("🔓 Group name unlocked.", threadID);
+          log("Group name unlocked");
+        } catch (e) {
+          api.sendMessage("❌ Failed to unlock group name.", threadID);
+          log("Unlock group name error: " + e);
+        }
+      } else {
+        const newName = event.body.slice(7).trim();
+        if (!newName) {
+          api.sendMessage("❌ Provide a name after /gclock", threadID);
+          return;
+        }
+        try {
+          await api.setTitle(newName, threadID);
+          LOCKED_GROUP_NAME = newName;
+          api.sendMessage(`🔒 Group name locked to "${newName}"`, threadID);
+          log(`Group locked with name "${newName}"`);
+        } catch (e) {
+          api.sendMessage("❌ Failed to lock group name.", threadID);
+          log("Lock group name error: " + e);
+        }
       }
+      return;
+    }
 
-      // Command handler (only BOSS_UID can run commands)
-      if (body.startsWith("/")) {
-        const parts = body.slice(1).split(" ");
-        const cmd = parts[0];
-        const args = parts.slice(1);
+    // /nicklock commands
+    if (body === "/nicklock on") {
+      nickLockEnabled = true;
+      api.sendMessage("🔒 Nickname lock enabled.", threadID);
+      log("Nickname lock enabled");
+      return;
+    }
+    if (body === "/nicklock off") {
+      nickLockEnabled = false;
+      api.sendMessage("🔓 Nickname lock disabled.", threadID);
+      log("Nickname lock disabled");
+      return;
+    }
 
-        if (commands[cmd]) {
-          if (senderID !== BOSS_UID) {
-            return api.sendMessage("⛔ Sirf boss use kar sakta hai ye command!", threadID);
-          }
-          try {
-            await commands[cmd](api, threadID, args);
-          } catch (e) {
-            log("❌ Command error: " + e);
-          }
+    // Abuse checker - auto abuse mentioned user if message contains abusive words
+    if (nickLockEnabled && event.type === "message" && event.mentions && event.mentions[BOSS_UID]) {
+      const text = event.body || "";
+      if (containsAbuse(text)) {
+        const lastAbuseTime = abuseCooldown.get(senderID) || 0;
+        if (Date.now() - lastAbuseTime > speed * 1000) {
+          api.sendMessage(autoMessage, threadID);
+          abuseCooldown.set(senderID, Date.now());
+          log(`Abused ${senderID}`);
         }
       }
     }
