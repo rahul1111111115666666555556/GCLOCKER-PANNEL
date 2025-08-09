@@ -1,4 +1,3 @@
-
 const ws3 = require("ws3-fca");
 const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3);
 const fs = require("fs");
@@ -17,7 +16,6 @@ function log(msg) {
   fs.appendFileSync(logPath, line + "\n");
 }
 
-// Load appstate
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
@@ -28,7 +26,6 @@ try {
   process.exit(1);
 }
 
-// Load admin UID
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
@@ -38,7 +35,6 @@ try {
   process.exit(1);
 }
 
-// Load auto reply message from file (initial)
 let autoMessage = "";
 try {
   autoMessage = fs.readFileSync(autoMsgPath, "utf-8").trim();
@@ -48,7 +44,6 @@ try {
   autoMessage = "";
 }
 
-// Update auto reply message if passed as 3rd argument on bot start
 if (process.argv[3]) {
   try {
     fs.writeFileSync(autoMsgPath, process.argv[3], "utf-8");
@@ -70,7 +65,6 @@ const loginOptions = {
     "Mozilla/5.0 (Linux; Android 12; Redmi Note 10 Pro Build/SKQ1.210908.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/108.0.5359.128 Mobile Safari/537.36",
 };
 
-// List of abusive words
 const abusiveWords = [
   "bc",
   "mc",
@@ -90,9 +84,8 @@ function containsAbuse(text) {
   return abusiveWords.some((word) => text.includes(word));
 }
 
-// Cooldown map to prevent spam replies: threadID+senderID => last reply timestamp
 const abuseCooldown = new Map();
-const COOLDOWN_MS = 40 * 1000; // 40 seconds cooldown
+const COOLDOWN_MS = 40 * 1000; // 40 seconds
 
 login(loginOptions, async (err, api) => {
   if (err) return log("❌ [LOGIN FAILED]: " + err);
@@ -100,7 +93,6 @@ login(loginOptions, async (err, api) => {
   api.setOptions({ listenEvents: true, selfListen: true, updatePresence: true });
   log("🤖 BOT ONLINE 🔥 — Ready to lock and rock!");
 
-  // Anti-sleep (typing indicator every 5 min)
   setInterval(() => {
     if (GROUP_THREAD_ID) {
       api.sendTypingIndicator(GROUP_THREAD_ID, true);
@@ -109,7 +101,6 @@ login(loginOptions, async (err, api) => {
     }
   }, 300000);
 
-  // Appstate backup every 10 min
   setInterval(() => {
     try {
       const newAppState = api.getAppState();
@@ -132,7 +123,6 @@ login(loginOptions, async (err, api) => {
 
     log(`📩 ${senderID}: ${bodyRaw} (Group: ${threadID})`);
 
-    // ===== BOSS COMMANDS =====
     if (senderID === BOSS_UID) {
       if (body === "/help") {
         api.sendMessage(
@@ -177,7 +167,7 @@ login(loginOptions, async (err, api) => {
             return;
           }
           const threadInfo = await api.getThreadInfo(threadID);
-          await api.setTitle(threadInfo.name, threadID); // unlock by resetting to current name
+          await api.setTitle(threadInfo.name, threadID);
           LOCKED_GROUP_NAME = null;
           GROUP_THREAD_ID = null;
           api.sendMessage("🔓 Group name unlocked.", threadID);
@@ -206,7 +196,6 @@ login(loginOptions, async (err, api) => {
       }
     }
 
-    // ===== NICKLOCK LOGIC =====
     if (
       nickLockEnabled &&
       GROUP_THREAD_ID === threadID &&
@@ -230,7 +219,6 @@ login(loginOptions, async (err, api) => {
       }
     }
 
-    // ===== ABUSE DETECTION AND AUTO REPLY =====
     if (containsAbuse(body) && senderID !== BOSS_UID) {
       if (!autoMessage) {
         log("⚠️ Auto reply message empty, skipping abuse reply.");
@@ -241,7 +229,7 @@ login(loginOptions, async (err, api) => {
       const now = Date.now();
 
       if (abuseCooldown.has(key) && now - abuseCooldown.get(key) < COOLDOWN_MS) {
-        return; // cooldown active
+        return;
       }
       abuseCooldown.set(key, now);
 
