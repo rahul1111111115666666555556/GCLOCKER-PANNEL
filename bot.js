@@ -4,10 +4,14 @@ const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
 
-// Indian proxy (example working proxy for India, replace with your own if needed)
-const INDIAN_PROXY = "http://103.119.112.54:80";  // Replace with any valid Indian proxy URL
-
-const proxyAgent = new HttpsProxyAgent(INDIAN_PROXY);
+// Optional Proxy (fallback safe)
+const INDIAN_PROXY = "http://103.119.112.54:80";
+let proxyAgent;
+try {
+  proxyAgent = new HttpsProxyAgent(INDIAN_PROXY);
+} catch {
+  proxyAgent = null;
+}
 
 const uid = process.argv[2];
 const userDir = path.join(__dirname, "users", uid);
@@ -21,25 +25,28 @@ function log(msg) {
   fs.appendFileSync(logPath, line + "\n");
 }
 
+// Load AppState
 let appState;
 try {
   const raw = fs.readFileSync(appStatePath, "utf-8");
-  if (!raw.trim()) throw new Error("File is empty");
+  if (!raw.trim()) throw new Error("File empty");
   appState = JSON.parse(raw);
-} catch (err) {
-  log("❌ appstate.json is invalid or empty.");
+} catch {
+  log("❌ appstate.json invalid or empty.");
   process.exit(1);
 }
 
+// Load Admin UID
 let BOSS_UID;
 try {
   BOSS_UID = fs.readFileSync(adminPath, "utf-8").trim();
   if (!BOSS_UID) throw new Error("UID missing");
-} catch (err) {
-  log("❌ admin.txt is invalid or empty.");
+} catch {
+  log("❌ admin.txt invalid or empty.");
   process.exit(1);
 }
 
+// State Variables
 let GROUP_THREAD_ID = null;
 let LOCKED_GROUP_NAME = null;
 let lockedNick = null;
@@ -47,189 +54,204 @@ let nickLockEnabled = false;
 let nickRemoveEnabled = false;
 let gcAutoRemoveEnabled = false;
 
+// Login Options
 const loginOptions = {
   appState,
   userAgent:
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FBAV/400.0.0.0.0",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) " +
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FBAV/400.0.0.0.0",
   agent: proxyAgent,
 };
 
-login(loginOptions, (err, api) => {
-  if (err) return log("❌ [LOGIN FAILED]: " + err);
-
-  api.setOptions({
-    listenEvents: true,
-    selfListen: true,
-    updatePresence: true,
-    userAgent:
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 FBAV/400.0.0.0.0",
-    headers: {
-      "Accept": "application/json, text/javascript, */*; q=0.01",
-      "Accept-Language": "en-IN,en-US;q=0.9,en;q=0.8",
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "Origin": "https://www.facebook.com",
-      "Referer": "https://www.facebook.com/",
-      "Sec-Fetch-Dest": "empty",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Site": "same-origin",
-      "X-FB-LSD": "AVpWNRQy_OU",
-      "X-FB-Friendly-Name": "MessengerGraphQLThreadlistQuery",
-      "X-FB-Revision-ID": "4000123",
-    },
-    agent: proxyAgent,
-  });
-
-  log("🤖 BOT ONLINE — Ready to rock");
-
-  setInterval(() => {
-    if (GROUP_THREAD_ID) {
-      api.sendTypingIndicator(GROUP_THREAD_ID, true);
-      setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
-      log("💤 Anti-Sleep Triggered");
-    }
-  }, 300000);
-
-  setInterval(() => {
-    try {
-      const newAppState = api.getAppState();
-      fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
-      log("💾 Appstate saved ✅");
-    } catch (e) {
-      log("❌ Appstate save failed: " + e);
-    }
-  }, 600000);
-
-  api.listenMqtt(async (err, event) => {
-    if (err) return log("❌ Listen error: " + err);
-
-    const senderID = event.senderID;
-    const threadID = event.threadID;
-    const body = (event.body || "").toLowerCase();
-
-    if (event.type === "message") {
-      log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
+// Start Bot
+function startBot() {
+  login(loginOptions, (err, api) => {
+    if (err) {
+      log("❌ [LOGIN FAILED]: " + err);
+      setTimeout(startBot, 10000); // retry after 10s
+      return;
     }
 
-    // /gclock
-    if (body.startsWith("/gclock") && senderID === BOSS_UID) {
+    api.setOptions({
+      listenEvents: true,
+      selfListen: true,
+      updatePresence: true,
+    });
+
+    log("🤖 BOT ONLINE — Running now");
+
+    // Anti-Sleep
+    setInterval(() => {
+      if (GROUP_THREAD_ID) {
+        api.sendTypingIndicator(GROUP_THREAD_ID, true);
+        setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
+        log("💤 Anti-Sleep Triggered");
+      }
+    }, 300000);
+
+    // Auto-save AppState
+    setInterval(() => {
       try {
-        const newName = event.body.slice(7).trim();
-        GROUP_THREAD_ID = threadID;
-        LOCKED_GROUP_NAME = newName;
-        gcAutoRemoveEnabled = false;
-        await api.setTitle(newName, threadID);
-        api.sendMessage(`🔒 Naam lock ho gaya: "${newName}"`, threadID);
-      } catch {
-        api.sendMessage("❌ Naam lock nahi hua", threadID);
+        const newAppState = api.getAppState();
+        fs.writeFileSync(appStatePath, JSON.stringify(newAppState, null, 2));
+        log("💾 AppState saved ✅");
+      } catch (e) {
+        log("❌ Failed saving AppState: " + e);
       }
-    }
+    }, 600000);
 
-    // /gcremove
-    if (body === "/gcremove" && senderID === BOSS_UID) {
+    // Listener with auto-reconnect
+    function listen() {
       try {
-        await api.setTitle("", threadID);
-        LOCKED_GROUP_NAME = null;
-        GROUP_THREAD_ID = threadID;
-        gcAutoRemoveEnabled = true;
-        api.sendMessage("🧹 Naam hata diya. Auto remove ON ✅", threadID);
-      } catch {
-        api.sendMessage("❌ Naam remove fail", threadID);
-      }
-    }
+        api.listenMqtt(async (err, event) => {
+          if (err) {
+            log("❌ Listen error: " + err);
+            setTimeout(listen, 5000); // auto reconnect
+            return;
+          }
 
-    // Revert GC name or auto-remove
-    if (event.logMessageType === "log:thread-name") {
-      const changed = event.logMessageData.name;
-      if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID && changed !== LOCKED_GROUP_NAME) {
-        try {
-          await api.setTitle(LOCKED_GROUP_NAME, threadID);
-        } catch (e) {
-          api.sendMessage("❌ GC naam wapas nahi hua", threadID);
-        }
-      } else if (gcAutoRemoveEnabled) {
-        try {
-          await api.setTitle("", threadID);
-          log(`🧹 GC auto-removed: "${changed}"`);
-        } catch (e) {
-          log("❌ GC auto remove fail: " + e);
-        }
-      }
-    }
+          const senderID = event.senderID;
+          const threadID = event.threadID;
+          const body = (event.body || "").toLowerCase();
 
-    // /nicklock on <name>
-    if (body.startsWith("/nicklock on") && senderID === BOSS_UID) {
-      lockedNick = event.body.slice(13).trim();
-      nickLockEnabled = true;
-      try {
-        const info = await api.getThreadInfo(threadID);
-        for (const u of info.userInfo) {
-          await api.changeNickname(lockedNick, threadID, u.id);
-        }
-        api.sendMessage(`🔐 Nickname lock: "${lockedNick}" set`, threadID);
-      } catch {
-        api.sendMessage("❌ Nickname set fail", threadID);
-      }
-    }
+          if (event.type === "message") {
+            log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
+          }
 
-    // /nicklock off
-    if (body === "/nicklock off" && senderID === BOSS_UID) {
-      nickLockEnabled = false;
-      lockedNick = null;
-      api.sendMessage("🔓 Nickname lock removed", threadID);
-    }
+          // -------------------
+          // COMMAND HANDLERS
+          // -------------------
 
-    // /nickremoveall
-    if (body === "/nickremoveall" && senderID === BOSS_UID) {
-      nickRemoveEnabled = true;
-      try {
-        const info = await api.getThreadInfo(threadID);
-        for (const u of info.userInfo) {
-          await api.changeNickname("", threadID, u.id);
-        }
-        api.sendMessage("💥 Nicknames removed. Auto-remove ON", threadID);
-      } catch {
-        api.sendMessage("❌ Nick remove fail", threadID);
-      }
-    }
+          // /gclock
+          if (body.startsWith("/gclock") && senderID === BOSS_UID) {
+            try {
+              const newName = event.body.slice(7).trim();
+              GROUP_THREAD_ID = threadID;
+              LOCKED_GROUP_NAME = newName;
+              gcAutoRemoveEnabled = false;
+              await api.setTitle(newName, threadID);
+              api.sendMessage(`🔒 Group name locked: "${newName}"`, threadID);
+            } catch {
+              api.sendMessage("❌ Failed to lock name", threadID);
+            }
+          }
 
-    // /nickremoveoff
-    if (body === "/nickremoveoff" && senderID === BOSS_UID) {
-      nickRemoveEnabled = false;
-      api.sendMessage("🛑 Nick auto remove OFF", threadID);
-    }
+          // /gcremove
+          if (body === "/gcremove" && senderID === BOSS_UID) {
+            try {
+              await api.setTitle("", threadID);
+              LOCKED_GROUP_NAME = null;
+              GROUP_THREAD_ID = threadID;
+              gcAutoRemoveEnabled = true;
+              api.sendMessage("🧹 Name removed. Auto-remove ON ✅", threadID);
+            } catch {
+              api.sendMessage("❌ Failed to remove name", threadID);
+            }
+          }
 
-    // nickname actions
-    if (event.logMessageType === "log:user-nickname") {
-      const changedUID = event.logMessageData.participant_id;
-      const newNick = event.logMessageData.nickname;
+          // Handle group name changes
+          if (event.logMessageType === "log:thread-name") {
+            const changed = event.logMessageData.name;
+            if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID && changed !== LOCKED_GROUP_NAME) {
+              try {
+                await api.setTitle(LOCKED_GROUP_NAME, threadID);
+              } catch {
+                log("❌ Failed reverting GC name");
+              }
+            } else if (gcAutoRemoveEnabled) {
+              try {
+                await api.setTitle("", threadID);
+                log(`🧹 GC name auto-removed: "${changed}"`);
+              } catch {
+                log("❌ Failed auto-remove GC name");
+              }
+            }
+          }
 
-      if (nickLockEnabled && newNick !== lockedNick) {
-        try {
-          await api.changeNickname(lockedNick, threadID, changedUID);
-        } catch (e) {
-          log("❌ Nick revert fail");
-        }
-      }
+          // /nicklock on <name>
+          if (body.startsWith("/nicklock on") && senderID === BOSS_UID) {
+            lockedNick = event.body.slice(13).trim();
+            nickLockEnabled = true;
+            try {
+              const info = await api.getThreadInfo(threadID);
+              for (const u of info.userInfo) {
+                await api.changeNickname(lockedNick, threadID, u.id);
+              }
+              api.sendMessage(`🔐 Nickname locked: "${lockedNick}"`, threadID);
+            } catch {
+              api.sendMessage("❌ Failed setting nick", threadID);
+            }
+          }
 
-      if (nickRemoveEnabled && newNick !== "") {
-        try {
-          await api.changeNickname("", threadID, changedUID);
-        } catch (e) {
-          log("❌ Nick auto remove fail");
-        }
-      }
-    }
+          // /nicklock off
+          if (body === "/nicklock off" && senderID === BOSS_UID) {
+            nickLockEnabled = false;
+            lockedNick = null;
+            api.sendMessage("🔓 Nickname lock disabled", threadID);
+          }
 
-    // /status
-    if (body === "/status" && senderID === BOSS_UID) {
-      const msg = `
+          // /nickremoveall
+          if (body === "/nickremoveall" && senderID === BOSS_UID) {
+            nickRemoveEnabled = true;
+            try {
+              const info = await api.getThreadInfo(threadID);
+              for (const u of info.userInfo) {
+                await api.changeNickname("", threadID, u.id);
+              }
+              api.sendMessage("💥 Nicknames cleared. Auto-remove ON", threadID);
+            } catch {
+              api.sendMessage("❌ Failed removing nicknames", threadID);
+            }
+          }
+
+          // /nickremoveoff
+          if (body === "/nickremoveoff" && senderID === BOSS_UID) {
+            nickRemoveEnabled = false;
+            api.sendMessage("🛑 Nick auto-remove OFF", threadID);
+          }
+
+          // Handle nickname changes
+          if (event.logMessageType === "log:user-nickname") {
+            const changedUID = event.logMessageData.participant_id;
+            const newNick = event.logMessageData.nickname;
+
+            if (nickLockEnabled && newNick !== lockedNick) {
+              try {
+                await api.changeNickname(lockedNick, threadID, changedUID);
+              } catch {
+                log("❌ Failed reverting nickname");
+              }
+            }
+
+            if (nickRemoveEnabled && newNick !== "") {
+              try {
+                await api.changeNickname("", threadID, changedUID);
+              } catch {
+                log("❌ Failed auto-remove nickname");
+              }
+            }
+          }
+
+          // /status
+          if (body === "/status" && senderID === BOSS_UID) {
+            const msg = `
 BOT STATUS:
 • GC Lock: ${LOCKED_GROUP_NAME || "OFF"}
 • GC AutoRemove: ${gcAutoRemoveEnabled ? "ON" : "OFF"}
 • Nick Lock: ${nickLockEnabled ? `ON (${lockedNick})` : "OFF"}
 • Nick AutoRemove: ${nickRemoveEnabled ? "ON" : "OFF"}
 `;
-      api.sendMessage(msg.trim(), threadID);
+            api.sendMessage(msg.trim(), threadID);
+          }
+        });
+      } catch (e) {
+        log("❌ Listener crashed: " + e);
+        setTimeout(listen, 5000);
+      }
     }
+
+    listen(); // start listening
   });
-});
+}
+
+startBot();
