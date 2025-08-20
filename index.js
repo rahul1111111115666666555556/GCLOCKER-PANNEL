@@ -15,7 +15,7 @@ app.use(express.json());
 
 let processes = {}; // UID → bot process
 
-// ✅ Start Bot Handler
+// ✅ Start Bot
 app.post("/start-bot", (req, res) => {
   const { appstate, admin } = req.body;
 
@@ -33,15 +33,14 @@ app.post("/start-bot", (req, res) => {
   if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
 
   try {
-    // Save user appstate + admin UID
     fs.writeFileSync(path.join(userDir, "appstate.json"), JSON.stringify(JSON.parse(appstate), null, 2));
     fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
     fs.writeFileSync(path.join(userDir, "logs.txt"), "📂 Logs started...\n");
 
-    // Kill existing if already running
+    // Kill if already running
     if (processes[admin]) processes[admin].kill();
 
-    // Start bot process
+    // Start bot
     processes[admin] = fork("bot.js", [admin]);
 
     res.send(`✅ Bot started successfully for UID: ${admin}`);
@@ -51,7 +50,7 @@ app.post("/start-bot", (req, res) => {
   }
 });
 
-// ✅ Stop Bot Handler
+// ✅ Stop Bot
 app.get("/stop-bot", (req, res) => {
   const { uid } = req.query;
   if (!uid || !processes[uid]) return res.send("⚠️ Bot not running.");
@@ -60,7 +59,7 @@ app.get("/stop-bot", (req, res) => {
   res.send(`🔴 Bot stopped for UID: ${uid}`);
 });
 
-// ✅ Fetch Logs
+// ✅ Logs
 app.get("/logs", (req, res) => {
   const uid = req.query.uid;
   if (!uid) return res.send("❌ UID missing.");
@@ -70,5 +69,5 @@ app.get("/logs", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 AROHI X ANURAG panel running at http://localhost:${PORT}`);
+  console.log(`🚀 ANURAG X AROHI panel running at http://localhost:${PORT}`);
 });
