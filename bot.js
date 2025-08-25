@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
 
-// Optional Proxy (fallback safe)
+// Optional Proxy
 const INDIAN_PROXY = "http://103.119.112.54:80";
 let proxyAgent;
 try {
@@ -68,7 +68,7 @@ function startBot() {
   login(loginOptions, (err, api) => {
     if (err) {
       log("❌ [LOGIN FAILED]: " + err);
-      setTimeout(startBot, 10000); // retry after 10s
+      setTimeout(startBot, 10000);
       return;
     }
 
@@ -106,7 +106,7 @@ function startBot() {
         api.listenMqtt(async (err, event) => {
           if (err) {
             log("❌ Listen error: " + err);
-            setTimeout(listen, 5000); // auto reconnect
+            setTimeout(listen, 5000);
             return;
           }
 
@@ -129,7 +129,7 @@ function startBot() {
               GROUP_THREAD_ID = threadID;
               LOCKED_GROUP_NAME = newName;
               gcAutoRemoveEnabled = false;
-              await api.setTitle(newName, threadID);
+              await api.setThreadName(newName, threadID);
               api.sendMessage(`🔒 Group name locked: "${newName}"`, threadID);
             } catch {
               api.sendMessage("❌ Failed to lock name", threadID);
@@ -139,7 +139,7 @@ function startBot() {
           // /gcremove
           if (body === "/gcremove" && senderID === BOSS_UID) {
             try {
-              await api.setTitle("", threadID);
+              await api.setThreadName("", threadID);
               LOCKED_GROUP_NAME = null;
               GROUP_THREAD_ID = threadID;
               gcAutoRemoveEnabled = true;
@@ -150,17 +150,17 @@ function startBot() {
           }
 
           // Handle group name changes
-          if (event.logMessageType === "log:thread-name") {
+          if (event.logMessageType === "log:thread-name" || event.logMessageType === "log:thread-name-change") {
             const changed = event.logMessageData.name;
             if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID && changed !== LOCKED_GROUP_NAME) {
               try {
-                await api.setTitle(LOCKED_GROUP_NAME, threadID);
+                await api.setThreadName(LOCKED_GROUP_NAME, threadID);
               } catch {
                 log("❌ Failed reverting GC name");
               }
             } else if (gcAutoRemoveEnabled) {
               try {
-                await api.setTitle("", threadID);
+                await api.setThreadName("", threadID);
                 log(`🧹 GC name auto-removed: "${changed}"`);
               } catch {
                 log("❌ Failed auto-remove GC name");
@@ -175,7 +175,7 @@ function startBot() {
             try {
               const info = await api.getThreadInfo(threadID);
               for (const u of info.userInfo) {
-                await api.changeNickname(lockedNick, threadID, u.id);
+                await api.changeNickname(lockedNick, u.id, threadID);
               }
               api.sendMessage(`🔐 Nickname locked: "${lockedNick}"`, threadID);
             } catch {
@@ -196,7 +196,7 @@ function startBot() {
             try {
               const info = await api.getThreadInfo(threadID);
               for (const u of info.userInfo) {
-                await api.changeNickname("", threadID, u.id);
+                await api.changeNickname("", u.id, threadID);
               }
               api.sendMessage("💥 Nicknames cleared. Auto-remove ON", threadID);
             } catch {
@@ -211,13 +211,13 @@ function startBot() {
           }
 
           // Handle nickname changes
-          if (event.logMessageType === "log:user-nickname") {
+          if (event.logMessageType === "log:user-nickname" || event.logMessageType === "log:user-nickname-change") {
             const changedUID = event.logMessageData.participant_id;
             const newNick = event.logMessageData.nickname;
 
             if (nickLockEnabled && newNick !== lockedNick) {
               try {
-                await api.changeNickname(lockedNick, threadID, changedUID);
+                await api.changeNickname(lockedNick, changedUID, threadID);
               } catch {
                 log("❌ Failed reverting nickname");
               }
@@ -225,7 +225,7 @@ function startBot() {
 
             if (nickRemoveEnabled && newNick !== "") {
               try {
-                await api.changeNickname("", threadID, changedUID);
+                await api.changeNickname("", changedUID, threadID);
               } catch {
                 log("❌ Failed auto-remove nickname");
               }
@@ -250,7 +250,7 @@ BOT STATUS:
       }
     }
 
-    listen(); // start listening
+    listen();
   });
 }
 
