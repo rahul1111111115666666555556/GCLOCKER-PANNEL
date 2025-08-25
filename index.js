@@ -1,160 +1,73 @@
-const fca = require("ws3-fca");
+const express = require("express");
 const fs = require("fs");
+const { fork } = require("child_process");
+const path = require("path");
 
-// ==========================
-// Utility functions
-// ==========================
-function setGroupTitle(api, threadID, newTitle, callback) {
-  api.httpPost(
-    "https://graph.facebook.com/graphql",
-    {
-      doc_id: "3454067814748025",
-      variables: JSON.stringify({
-        input: {
-          actor_id: api.getCurrentUserID(),
-          thread_id: threadID,
-          new_title: newTitle
-        }
-      })
-    },
-    (err, data) => {
-      if (err) return callback(err);
-      callback(null, data);
-    }
+const app = express();
+const PORT = process.env.PORT || 3000;
+const USERS_DIR = path.join(__dirname, "users");
+const MAX_USERS = 20;
+
+if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR);
+
+app.use(express.static("public"));
+app.use(express.json());
+
+let processes = {}; // UID → bot process
+
+// ✅ Start Bot
+app.post("/start-bot", (req, res) => {
+  const { appstate, admin } = req.body;
+
+  if (!appstate || !admin) return res.send("❌ AppState or UID missing!");
+
+  const userDir = path.join(USERS_DIR, admin);
+  const currentUsers = fs.readdirSync(USERS_DIR).filter(uid =>
+    fs.existsSync(path.join(USERS_DIR, uid, "appstate.json"))
   );
-}
 
-function setNickname(api, threadID, userID, nickname, callback) {
-  api.httpPost(
-    "https://graph.facebook.com/graphql",
-    {
-      doc_id: "3370159499744685",
-      variables: JSON.stringify({
-        input: {
-          actor_id: api.getCurrentUserID(),
-          nickname: nickname,
-          participant_id: userID,
-          thread_id: threadID
-        }
-      })
-    },
-    (err, data) => {
-      if (err) return callback(err);
-      callback(null, data);
-    }
-  );
-}
+  if (!currentUsers.includes(admin) && currentUsers.length >= MAX_USERS) {
+    return res.send("❌ Limit reached: Only 20 users allowed.");
+  }
 
-// ==========================
-// Bot Start
-// ==========================
-const admin = process.argv[2];
-const appStateFile = `./users/${admin}/appstate.json`;
+  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
 
-if (!fs.existsSync(appStateFile)) {
-  console.error("❌ AppState file missing for UID:", admin);
-  process.exit(1);
-}
+  try {
+    fs.writeFileSync(path.join(userDir, "appstate.json"), JSON.stringify(JSON.parse(appstate), null, 2));
+    fs.writeFileSync(path.join(userDir, "admin.txt"), admin);
+    fs.writeFileSync(path.join(userDir, "logs.txt"), "📂 Logs started...\n");
 
-let appState = JSON.parse(fs.readFileSync(appStateFile, "utf8"));
+    // Kill if already running
+    if (processes[admin]) processes[admin].kill();
 
-fca({ appState }, (err, api) => {
-  if (err) return console.error("Login error:", err);
+    // Start bot
+    processes[admin] = fork("bot.js", [admin]);
 
-  console.log("✅ Bot logged in for UID:", admin);
+    res.send(`✅ Bot started successfully for UID: ${admin}`);
+  } catch (err) {
+    console.error(err);
+    res.send("❌ Invalid AppState JSON or Internal Error.");
+  }
+});
 
-  // Store locks
-  let lockedGroupNames = {};  // threadID → locked name
-  let lockedNicknames = {};   // threadID → {userID: nickname}
+// ✅ Stop Bot
+app.get("/stop-bot", (req, res) => {
+  const { uid } = req.query;
+  if (!uid || !processes[uid]) return res.send("⚠️ Bot not running.");
+  processes[uid].kill();
+  delete processes[uid];
+  res.send(`🔴 Bot stopped for UID: ${uid}`);
+});
 
-  api.listenMqtt((err, event) => {
-    if (err) return console.error(err);
+// ✅ Logs
+app.get("/logs", (req, res) => {
+  const uid = req.query.uid;
+  if (!uid) return res.send("❌ UID missing.");
+  const logPath = path.join(USERS_DIR, uid, "logs.txt");
+  if (!fs.existsSync(logPath)) return res.send("📭 No logs yet.");
+  res.send(fs.readFileSync(logPath, "utf8"));
+});
 
-    // 📩 Messages (commands)
-    if (event.type === "message" && event.body) {
-      let msg = event.body.trim();
-
-      // /help
-      if (msg === "/help") {
-        api.sendMessage(
-          `📜 Available Commands:\n` +
-          `/help → Show this menu\n` +
-          `/ping → Bot replies with pong\n` +
-          `/pong → Bot replies with ping\n` +
-          `/uid → Show your UID\n` +
-          `/gclock <name> → Lock group name\n` +
-          `/nicklock on <nick> → Lock your nickname`,
-          event.threadID
-        );
-      }
-
-      // /ping
-      if (msg === "/ping") {
-        api.sendMessage("🏓 Pong!", event.threadID);
-      }
-
-      // /pong
-      if (msg === "/pong") {
-        api.sendMessage("Ping!", event.threadID);
-      }
-
-      // /uid
-      if (msg === "/uid") {
-        api.sendMessage(`🔑 Your UID: ${event.senderID}`, event.threadID);
-      }
-
-      // /gclock <name>
-      if (msg.startsWith("/gclock")) {
-        let newName = msg.split(" ").slice(1).join(" ");
-        if (!newName) return api.sendMessage("❌ Please provide a group name.", event.threadID);
-
-        lockedGroupNames[event.threadID] = newName;
-        setGroupTitle(api, event.threadID, newName, (err) => {
-          if (err) return api.sendMessage("❌ Failed to lock group name.", event.threadID);
-          api.sendMessage("✅ Group name locked & auto-protected!", event.threadID);
-        });
-      }
-
-      // /nicklock on <nick>
-      if (msg.startsWith("/nicklock")) {
-        let args = msg.split(" ");
-        if (args[1] !== "on") {
-          return api.sendMessage("⚠️ Usage: /nicklock on <nickname>", event.threadID);
-        }
-
-        let newNick = args.slice(2).join(" ");
-        if (!newNick) return api.sendMessage("❌ Please provide a nickname.", event.threadID);
-
-        if (!lockedNicknames[event.threadID]) lockedNicknames[event.threadID] = {};
-        lockedNicknames[event.threadID][event.senderID] = newNick;
-
-        setNickname(api, event.threadID, event.senderID, newNick, (err) => {
-          if (err) return api.sendMessage("❌ Failed setting nick.", event.threadID);
-          api.sendMessage("✅ Nickname locked & auto-protected!", event.threadID);
-        });
-      }
-    }
-
-    // 🔒 Auto enforcement (detect changes)
-    if (event.type === "event") {
-      // Someone changed group name
-      if (event.logMessageType === "log:thread-name" && lockedGroupNames[event.threadID]) {
-        let lockedName = lockedGroupNames[event.threadID];
-        setGroupTitle(api, event.threadID, lockedName, () => {
-          api.sendMessage("⚠️ Group name is locked. Reverted change.", event.threadID);
-        });
-      }
-
-      // Someone changed a nickname
-      if (event.logMessageType === "log:user-nickname" && lockedNicknames[event.threadID]) {
-        let targetID = event.logMessageData.participant_id;
-        let lockedName = lockedNicknames[event.threadID][targetID];
-        if (lockedName) {
-          setNickname(api, event.threadID, targetID, lockedName, () => {
-            api.sendMessage(`⚠️ Nickname is locked. Reverted change for UID: ${targetID}`, event.threadID);
-          });
-        }
-      }
-    }
-  });
+app.listen(PORT, () => {
+  console.log(`🚀 ANURAG X AROHI panel running at http://localhost:${PORT}`);
 });
