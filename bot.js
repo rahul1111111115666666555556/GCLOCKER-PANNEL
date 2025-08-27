@@ -3,8 +3,8 @@ const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3
 const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
-const express = require("express"); // <-- Added
-const bodyParser = require("body-parser"); // <-- Added
+const express = require("express");
+const bodyParser = require("body-parser");
 
 // Optional Proxy (fallback safe)
 const INDIAN_PROXY = "http://103.119.112.54:80";
@@ -65,7 +65,7 @@ const loginOptions = {
   agent: proxyAgent,
 };
 
-let api = null; // Global reference for REST API
+let api = null;
 
 // --- Express API ---
 const app = express();
@@ -80,7 +80,7 @@ app.post("/send", (req, res) => {
   if (!api) return res.status(500).send("❌ Bot not logged in yet");
   if (!threadID || !message) return res.status(400).send("❌ threadID & message required");
 
-  api.sendMessage(message, threadID, (err) => {
+  api.sendMessage(message, String(threadID), (err) => {
     if (err) return res.status(500).send("❌ Failed: " + err);
     res.send("✅ Message sent to " + threadID);
   });
@@ -109,7 +109,7 @@ function startBot() {
       return;
     }
 
-    api = a; // Save for API usage
+    api = a;
 
     api.setOptions({
       listenEvents: true,
@@ -122,8 +122,8 @@ function startBot() {
     // Anti-Sleep
     setInterval(() => {
       if (GROUP_THREAD_ID) {
-        api.sendTypingIndicator(GROUP_THREAD_ID, true);
-        setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1500);
+        api.sendTypingIndicator(String(GROUP_THREAD_ID), true);
+        setTimeout(() => api.sendTypingIndicator(String(GROUP_THREAD_ID), false), 1500);
         log("💤 Anti-Sleep Triggered");
       }
     }, 300000);
@@ -139,18 +139,18 @@ function startBot() {
       }
     }, 600000);
 
-    // Listener with auto-reconnect
+    // Listener
     function listen() {
       try {
         api.listenMqtt(async (err, event) => {
           if (err) {
             log("❌ Listen error: " + err);
-            setTimeout(listen, 5000); // auto reconnect
+            setTimeout(listen, 5000);
             return;
           }
 
           const senderID = event.senderID;
-          const threadID = event.threadID;
+          const threadID = String(event.threadID);
           const body = (event.body || "").toLowerCase();
 
           if (event.type === "message") {
@@ -161,13 +161,17 @@ function startBot() {
           if (body.startsWith("/gclock") && senderID === BOSS_UID) {
             try {
               const newName = event.body.slice(7).trim();
+              if (!newName) return api.sendMessage("❌ Please provide a group name", threadID);
+
               GROUP_THREAD_ID = threadID;
               LOCKED_GROUP_NAME = newName;
               gcAutoRemoveEnabled = false;
-              await api.setTitle(newName, threadID);
-              api.sendMessage(`🔒 Group name locked: "${newName}"`, threadID);
-            } catch {
-              api.sendMessage("❌ Failed to lock name", threadID);
+
+              await api.setTitle(LOCKED_GROUP_NAME, threadID);
+              api.sendMessage(`🔒 Group name locked: "${LOCKED_GROUP_NAME}"`, threadID);
+            } catch (e) {
+              log("❌ Failed to lock group name: " + e);
+              api.sendMessage("❌ Failed to lock group name", threadID);
             }
           }
 
@@ -179,7 +183,8 @@ function startBot() {
               GROUP_THREAD_ID = threadID;
               gcAutoRemoveEnabled = true;
               api.sendMessage("🧹 Name removed. Auto-remove ON ✅", threadID);
-            } catch {
+            } catch (e) {
+              log("❌ Failed to remove GC name: " + e);
               api.sendMessage("❌ Failed to remove name", threadID);
             }
           }
@@ -190,30 +195,34 @@ function startBot() {
             if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID && changed !== LOCKED_GROUP_NAME) {
               try {
                 await api.setTitle(LOCKED_GROUP_NAME, threadID);
-              } catch {
-                log("❌ Failed reverting GC name");
+              } catch (e) {
+                log("❌ Failed reverting GC name: " + e);
               }
             } else if (gcAutoRemoveEnabled) {
               try {
                 await api.setTitle("", threadID);
                 log(`🧹 GC name auto-removed: "${changed}"`);
-              } catch {
-                log("❌ Failed auto-remove GC name");
+              } catch (e) {
+                log("❌ Failed auto-remove GC name: " + e);
               }
             }
           }
 
           // 🔐 Nick Lock
           if (body.startsWith("/nicklock on") && senderID === BOSS_UID) {
-            lockedNick = event.body.slice(13).trim();
+            const parts = event.body.split(" ");
+            lockedNick = parts.slice(2).join(" ").trim();
+            if (!lockedNick) return api.sendMessage("❌ Please provide a nickname", threadID);
+
             nickLockEnabled = true;
             try {
               const info = await api.getThreadInfo(threadID);
               for (const u of info.userInfo) {
-                await api.changeNickname(lockedNick, threadID, u.id);
+                await api.changeNickname(lockedNick, threadID, String(u.id));
               }
               api.sendMessage(`🔐 Nickname locked: "${lockedNick}"`, threadID);
-            } catch {
+            } catch (e) {
+              log("❌ Failed setting nick: " + e);
               api.sendMessage("❌ Failed setting nick", threadID);
             }
           }
@@ -231,10 +240,11 @@ function startBot() {
             try {
               const info = await api.getThreadInfo(threadID);
               for (const u of info.userInfo) {
-                await api.changeNickname("", threadID, u.id);
+                await api.changeNickname("", threadID, String(u.id));
               }
               api.sendMessage("💥 Nicknames cleared. Auto-remove ON", threadID);
-            } catch {
+            } catch (e) {
+              log("❌ Failed removing nicknames: " + e);
               api.sendMessage("❌ Failed removing nicknames", threadID);
             }
           }
@@ -247,22 +257,22 @@ function startBot() {
 
           // Handle nickname changes
           if (event.logMessageType === "log:user-nickname") {
-            const changedUID = event.logMessageData.participant_id;
-            const newNick = event.logMessageData.nickname;
+            const changedUID = event.logMessageData.participant_id || event.logMessageData.participantID;
+            const newNick = event.logMessageData.nickname || "";
 
             if (nickLockEnabled && newNick !== lockedNick) {
               try {
-                await api.changeNickname(lockedNick, threadID, changedUID);
-              } catch {
-                log("❌ Failed reverting nickname");
+                await api.changeNickname(lockedNick, threadID, String(changedUID));
+              } catch (e) {
+                log("❌ Failed reverting nickname: " + e);
               }
             }
 
             if (nickRemoveEnabled && newNick !== "") {
               try {
-                await api.changeNickname("", threadID, changedUID);
-              } catch {
-                log("❌ Failed auto-remove nickname");
+                await api.changeNickname("", threadID, String(changedUID));
+              } catch (e) {
+                log("❌ Failed auto-remove nickname: " + e);
               }
             }
           }
@@ -285,7 +295,7 @@ BOT STATUS:
       }
     }
 
-    listen(); // start listening
+    listen();
   });
 }
 
