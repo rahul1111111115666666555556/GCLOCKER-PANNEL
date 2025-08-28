@@ -69,5 +69,5 @@ app.get("/logs", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 ANURAG X AROHI panel running at http://localhost:${PORT}`);
+  console.log(`🚀 Rahul Don panel running at http://localhost:${PORT}`);
 });
